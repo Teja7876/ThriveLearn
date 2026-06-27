@@ -1,19 +1,15 @@
 package com.thrivelearn.app
 
-import android.content.pm.ActivityInfo
 import android.os.Bundle
 import android.view.KeyEvent
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import com.thrivelearn.app.theme.*
 
 class MainActivity : ComponentActivity() {
@@ -25,8 +21,6 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-        
         speechEngine = ThriveSpeechEngine(applicationContext)
         ttsEngine = ThriveTextToSpeech(applicationContext)
 
@@ -57,6 +51,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        speechEngine.stopListening()
         ttsEngine.shutdown()
         super.onDestroy()
     }
@@ -64,14 +59,32 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun MainScreenLayout(speechEngine: ThriveSpeechEngine, ttsEngine: ThriveTextToSpeech, triggeredAction: AppAction?, onActionConsumed: () -> Unit) {
-    val context = LocalContext.current
     var currentTab by remember { mutableIntStateOf(0) }
+    val tabs = listOf("Notes", "Materials")
     
-    // Pass the trigger down to the workspace
-    Scaffold { innerPadding ->
+    Scaffold(
+        bottomBar = {
+            NavigationBar {
+                tabs.forEachIndexed { index, label ->
+                    NavigationBarItem(
+                        selected = currentTab == index,
+                        onClick = { currentTab = index },
+                        label = { Text(label) },
+                        icon = { Text(if (index == 0) "Aa" else "File") },
+                        modifier = Modifier.semantics {
+                            contentDescription = "Open $label"
+                        }
+                    )
+                }
+            }
+        }
+    ) { innerPadding ->
         Box(modifier = Modifier.padding(innerPadding)) {
-            if (currentTab == 0) AccessibleNoteScreenContent(speechEngine, ttsEngine, triggeredAction, onActionConsumed)
-            else DocumentLibraryScreen(1.0f)
+            if (currentTab == 0) {
+                AccessibleNoteScreenContent(speechEngine, ttsEngine, triggeredAction, onActionConsumed)
+            } else {
+                DocumentLibraryScreen(ttsEngine = ttsEngine)
+            }
         }
     }
 }

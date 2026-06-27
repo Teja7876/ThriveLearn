@@ -21,7 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 @Composable
-fun DocumentLibraryScreen(fontScaleMultiplier: Float) {
+fun DocumentLibraryScreen(fontScaleMultiplier: Float = 1.0f, ttsEngine: ThriveTextToSpeech? = null) {
     val context = LocalContext.current
     var selectedFiles by remember { mutableStateOf<List<Pair<String, Uri>>>(emptyList()) }
     var activeMediaUri by remember { mutableStateOf<Uri?>(null) }
@@ -34,6 +34,18 @@ fun DocumentLibraryScreen(fontScaleMultiplier: Float) {
 
     val filePickerLauncher = rememberLauncherForActivityResult(contract = ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         uri?.let {
+            try {
+                context.contentResolver.takePersistableUriPermission(
+                    it,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                )
+            } catch (_: SecurityException) {
+                try {
+                    context.contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                } catch (_: SecurityException) {
+                    // Some providers do not offer persistable access; the file still works in this session.
+                }
+            }
             val fileName = getFileNameFromUri(context, it) ?: "Unknown File"
             if (selectedFiles.none { file -> file.second == it }) { selectedFiles = selectedFiles + Pair(fileName, it) }
         }
@@ -45,12 +57,26 @@ fun DocumentLibraryScreen(fontScaleMultiplier: Float) {
     }
 
     if (activeDocumentUri != null) {
-        AccessibleTextEditor(fileUri = activeDocumentUri!!, fileName = activeDocumentTitle, fontScaleMultiplier = fontScaleMultiplier, onClose = { activeDocumentUri = null })
+        AccessibleTextEditor(
+            fileUri = activeDocumentUri!!,
+            fileName = activeDocumentTitle,
+            fontScaleMultiplier = fontScaleMultiplier,
+            ttsEngine = ttsEngine,
+            onClose = { activeDocumentUri = null }
+        )
         return
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Button(onClick = { filePickerLauncher.launch(arrayOf("*/*")) }, modifier = Modifier.fillMaxWidth().height(64.dp)) { Text("Add File to Library", fontSize = currentFontSize) }
+        Text("Study Materials", style = MaterialTheme.typography.headlineSmall)
+        Text(
+            "Add text, audio, video, PDFs, or other class files.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
+        )
+
+        Button(onClick = { filePickerLauncher.launch(arrayOf("text/*", "audio/*", "video/*", "application/pdf", "application/*")) }, modifier = Modifier.fillMaxWidth().height(64.dp)) { Text("Add File to Library", fontSize = currentFontSize) }
         
         Spacer(modifier = Modifier.height(8.dp))
         
@@ -64,20 +90,29 @@ fun DocumentLibraryScreen(fontScaleMultiplier: Float) {
         }
 
         Text("Your Study Materials", style = MaterialTheme.typography.titleLarge)
+        if (selectedFiles.isEmpty()) {
+            Text(
+                "No files added yet.",
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.padding(top = 16.dp)
+            )
+        }
         LazyColumn(modifier = Modifier.fillMaxSize()) {
             items(selectedFiles) { file ->
-                Card(modifier = Modifier.fillMaxWidth().clickable {
+                Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable {
                     val mimeType = context.contentResolver.getType(file.second) ?: ""
                     if (mimeType.startsWith("audio/") || mimeType.startsWith("video/")) {
                         activeMediaUri = file.second
                         activeMediaTitle = file.first
-                    } else if (mimeType == "text/plain") {
+                    } else if (mimeType.startsWith("text/")) {
                         activeDocumentUri = file.second
                         activeDocumentTitle = file.first
                     } else {
                         openUniversalFile(context, file.second)
                     }
-                }) { Text(text = file.first, fontSize = currentFontSize, modifier = Modifier.padding(16.dp)) }
+                }.semantics { contentDescription = "Open study material ${file.first}" }) {
+                    Text(text = file.first, fontSize = currentFontSize, modifier = Modifier.padding(16.dp))
+                }
             }
         }
     }

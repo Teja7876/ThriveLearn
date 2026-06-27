@@ -19,6 +19,7 @@ fun AccessibleTextEditor(
     fileUri: Uri,
     fileName: String,
     fontScaleMultiplier: Float,
+    ttsEngine: ThriveTextToSpeech? = null,
     onClose: () -> Unit
 ) {
     val context = LocalContext.current
@@ -64,6 +65,35 @@ fun AccessibleTextEditor(
         )
 
         Spacer(modifier = Modifier.height(16.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            OutlinedButton(
+                onClick = { ttsEngine?.speak(documentText.ifBlank { "This document is empty." }) },
+                enabled = ttsEngine != null,
+                modifier = Modifier.weight(1f).padding(end = 8.dp)
+            ) {
+                Text("Read", fontSize = currentFontSize)
+            }
+
+            OutlinedButton(
+                onClick = {
+                    if (documentText.trim().length > 100) {
+                        documentText = TextSummarizer.summarize(documentText)
+                        Toast.makeText(context, "Document simplified", Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(context, "Text too short to simplify", Toast.LENGTH_SHORT).show()
+                    }
+                },
+                modifier = Modifier.weight(1f).padding(start = 8.dp)
+            ) {
+                Text("Simplify", fontSize = currentFontSize)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
 
         Row(
             modifier = Modifier.fillMaxWidth(),

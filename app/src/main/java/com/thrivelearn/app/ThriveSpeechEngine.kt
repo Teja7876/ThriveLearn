@@ -38,10 +38,7 @@ class ThriveSpeechEngine(private val context: Context) {
                     }
 
                     override fun onPartialResults(partialResults: Bundle?) {
-                        val matches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                        if (!matches.isNullOrEmpty()) {
-                            onResult(matches[0])
-                        }
+                        // Final results are handled in onResults to avoid duplicating dictated text.
                     }
                     override fun onEvent(eventType: Int, params: Bundle?) {}
                 })
