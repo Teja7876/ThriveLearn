@@ -19,14 +19,14 @@ import com.thrivelearn.app.theme.*
 class MainActivity : ComponentActivity() {
     private lateinit var speechEngine: ThriveSpeechEngine
     private lateinit var ttsEngine: ThriveTextToSpeech
-    
+
     // State to trigger actions from hardware
     var triggeredAction by mutableStateOf<AppAction?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-        
+
         speechEngine = ThriveSpeechEngine(applicationContext)
         ttsEngine = ThriveTextToSpeech(applicationContext)
 
@@ -39,8 +39,15 @@ class MainActivity : ComponentActivity() {
                 LocalFontMode provides currentFont
             ) {
                 ThriveLearnTheme(themeMode = currentTheme.value, fontMode = currentFont.value) {
-                    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                        MainScreenLayout(speechEngine, ttsEngine, triggeredAction) { triggeredAction = null }
+                    Surface(
+                        modifier = Modifier.fillMaxSize(),
+                        color = MaterialTheme.colorScheme.background
+                    ) {
+                        MainScreenLayout(
+                            speechEngine,
+                            ttsEngine,
+                            triggeredAction
+                        ) { triggeredAction = null }
                     }
                 }
             }
@@ -56,22 +63,51 @@ class MainActivity : ComponentActivity() {
         return super.onKeyDown(keyCode, event)
     }
 
+    // FIXED: Clean up speech engine resources
+    override fun onPause() {
+        speechEngine.stopListening()
+        super.onPause()
+    }
+
     override fun onDestroy() {
-        ttsEngine.shutdown()
+        // FIXED: Proper cleanup of all resources
+        try {
+            speechEngine.stopListening()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        try {
+            ttsEngine.shutdown()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
         super.onDestroy()
     }
 }
 
 @Composable
-fun MainScreenLayout(speechEngine: ThriveSpeechEngine, ttsEngine: ThriveTextToSpeech, triggeredAction: AppAction?, onActionConsumed: () -> Unit) {
+fun MainScreenLayout(
+    speechEngine: ThriveSpeechEngine,
+    ttsEngine: ThriveTextToSpeech,
+    triggeredAction: AppAction?,
+    onActionConsumed: () -> Unit
+) {
     val context = LocalContext.current
     var currentTab by remember { mutableIntStateOf(0) }
-    
+
     // Pass the trigger down to the workspace
     Scaffold { innerPadding ->
         Box(modifier = Modifier.padding(innerPadding)) {
-            if (currentTab == 0) AccessibleNoteScreenContent(speechEngine, ttsEngine, triggeredAction, onActionConsumed)
-            else DocumentLibraryScreen(1.0f)
+            if (currentTab == 0) {
+                AccessibleNoteScreenContent(
+                    speechEngine,
+                    ttsEngine,
+                    triggeredAction,
+                    onActionConsumed
+                )
+            } else {
+                DocumentLibraryScreen(1.0f)
+            }
         }
     }
 }

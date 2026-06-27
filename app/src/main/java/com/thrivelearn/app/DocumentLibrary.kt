@@ -29,15 +29,32 @@ fun DocumentLibraryScreen(fontScaleMultiplier: Float) {
     var activeDocumentUri by remember { mutableStateOf<Uri?>(null) }
     var activeDocumentTitle by remember { mutableStateOf("") }
     var showSettings by remember { mutableStateOf(false) }
-    
+
     val currentFontSize = (16 * fontScaleMultiplier).sp
 
-    val filePickerLauncher = rememberLauncherForActivityResult(contract = ActivityResultContracts.OpenDocument()) { uri: Uri? ->
-        uri?.let {
-            val fileName = getFileNameFromUri(context, it) ?: "Unknown File"
-            if (selectedFiles.none { file -> file.second == it }) { selectedFiles = selectedFiles + Pair(fileName, it) }
+    // FIXED: Restrict to accessible file types only
+    val filePickerLauncher =
+        rememberLauncherForActivityResult(contract = ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+            uri?.let {
+                val mimeType = context.contentResolver.getType(it) ?: ""
+                // Only allow text, audio, and video files
+                if (mimeType.startsWith("text/") || mimeType.startsWith("audio/") || mimeType.startsWith(
+                        "video/"
+                    )
+                ) {
+                    val fileName = getFileNameFromUri(context, it) ?: "Unknown File"
+                    if (selectedFiles.none { file -> file.second == it }) {
+                        selectedFiles = selectedFiles + Pair(fileName, it)
+                    }
+                } else {
+                    Toast.makeText(
+                        context,
+                        "Only text, audio, and video files are supported",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
         }
-    }
 
     if (showSettings) {
         SettingsScreen(onBack = { showSettings = false })
@@ -45,39 +62,91 @@ fun DocumentLibraryScreen(fontScaleMultiplier: Float) {
     }
 
     if (activeDocumentUri != null) {
-        AccessibleTextEditor(fileUri = activeDocumentUri!!, fileName = activeDocumentTitle, fontScaleMultiplier = fontScaleMultiplier, onClose = { activeDocumentUri = null })
+        AccessibleTextEditor(
+            fileUri = activeDocumentUri!!,
+            fileName = activeDocumentTitle,
+            fontScaleMultiplier = fontScaleMultiplier,
+            onClose = { activeDocumentUri = null }
+        )
         return
     }
 
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Button(onClick = { filePickerLauncher.launch(arrayOf("*/*")) }, modifier = Modifier.fillMaxWidth().height(64.dp)) { Text("Add File to Library", fontSize = currentFontSize) }
-        
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+            .semantics { contentDescription = "Document library screen" }
+    ) {
+        // FIXED: Add proper semantics to buttons
+        Button(
+            onClick = { filePickerLauncher.launch(arrayOf("text/*", "audio/*", "video/*")) },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(64.dp)
+                .semantics { contentDescription = "Add file to library button" }
+        ) {
+            Text("Add File to Library", fontSize = currentFontSize)
+        }
+
         Spacer(modifier = Modifier.height(8.dp))
-        
-        Button(onClick = { showSettings = true }, modifier = Modifier.fillMaxWidth()) { Text("Configure Hardware Buttons", fontSize = currentFontSize) }
+
+        Button(
+            onClick = { showSettings = true },
+            modifier = Modifier
+                .fillMaxWidth()
+                .semantics { contentDescription = "Configure hardware buttons" }
+        ) {
+            Text("Configure Hardware Buttons", fontSize = currentFontSize)
+        }
 
         Spacer(modifier = Modifier.height(16.dp))
 
         if (activeMediaUri != null) {
             AccessibleMediaPlayer(mediaUri = activeMediaUri!!, mediaTitle = activeMediaTitle)
-            Button(onClick = { activeMediaUri = null }, modifier = Modifier.fillMaxWidth()) { Text("Close Player") }
+            Button(
+                onClick = { activeMediaUri = null },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .semantics { contentDescription = "Close media player" }
+            ) {
+                Text("Close Player")
+            }
         }
 
-        Text("Your Study Materials", style = MaterialTheme.typography.titleLarge)
+        Text(
+            "Your Study Materials",
+            style = MaterialTheme.typography.titleLarge,
+            modifier = Modifier.semantics { contentDescription = "Study materials list" }
+        )
+
         LazyColumn(modifier = Modifier.fillMaxSize()) {
             items(selectedFiles) { file ->
-                Card(modifier = Modifier.fillMaxWidth().clickable {
-                    val mimeType = context.contentResolver.getType(file.second) ?: ""
-                    if (mimeType.startsWith("audio/") || mimeType.startsWith("video/")) {
-                        activeMediaUri = file.second
-                        activeMediaTitle = file.first
-                    } else if (mimeType == "text/plain") {
-                        activeDocumentUri = file.second
-                        activeDocumentTitle = file.first
-                    } else {
-                        openUniversalFile(context, file.second)
-                    }
-                }) { Text(text = file.first, fontSize = currentFontSize, modifier = Modifier.padding(16.dp)) }
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp)
+                        .clickable {
+                            val mimeType = context.contentResolver.getType(file.second) ?: ""
+                            when {
+                                mimeType.startsWith("audio/") || mimeType.startsWith("video/") -> {
+                                    activeMediaUri = file.second
+                                    activeMediaTitle = file.first
+                                }
+                                mimeType.startsWith("text/") -> {
+                                    activeDocumentUri = file.second
+                                    activeDocumentTitle = file.first
+                                }
+                                else -> openUniversalFile(context, file.second)
+                            }
+                        }
+                        .semantics { contentDescription = "File: ${file.first}" }
+                ) {
+                    Text(
+                        text = file.first,
+                        fontSize = currentFontSize,
+                        modifier = Modifier.padding(16.dp)
+                    )
+                }
             }
         }
     }
@@ -86,7 +155,14 @@ fun DocumentLibraryScreen(fontScaleMultiplier: Float) {
 private fun getFileNameFromUri(context: Context, uri: Uri): String? {
     var fileName: String? = null
     val cursor = context.contentResolver.query(uri, null, null, null, null)
-    cursor?.use { if (it.moveToFirst()) { val nameIndex = it.getColumnIndex(OpenableColumns.DISPLAY_NAME); if (nameIndex >= 0) { fileName = it.getString(nameIndex) } } }
+    cursor?.use {
+        if (it.moveToFirst()) {
+            val nameIndex = it.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+            if (nameIndex >= 0) {
+                fileName = it.getString(nameIndex)
+            }
+        }
+    }
     return fileName
 }
 
@@ -97,5 +173,9 @@ private fun openUniversalFile(context: Context, uri: Uri) {
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     }
-    try { context.startActivity(intent) } catch (e: ActivityNotFoundException) { Toast.makeText(context, "No compatible application found.", Toast.LENGTH_LONG).show() }
+    try {
+        context.startActivity(intent)
+    } catch (e: ActivityNotFoundException) {
+        Toast.makeText(context, "No compatible application found.", Toast.LENGTH_LONG).show()
+    }
 }

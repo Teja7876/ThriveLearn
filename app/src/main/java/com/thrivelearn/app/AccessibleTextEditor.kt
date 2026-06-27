@@ -24,20 +24,45 @@ fun AccessibleTextEditor(
     val context = LocalContext.current
     var documentText by remember { mutableStateOf("") }
     var isSaving by remember { mutableStateOf(false) }
+    var isLoading by remember { mutableStateOf(true) }
+    var errorMessage by remember { mutableStateOf("") }
     val currentFontSize = (16 * fontScaleMultiplier).sp
 
     // Load file contents when component launches
     LaunchedEffect(fileUri) {
         try {
+            isLoading = true
             context.contentResolver.openInputStream(fileUri)?.use { inputStream ->
                 BufferedReader(InputStreamReader(inputStream)).use { reader ->
                     documentText = reader.readText()
                 }
             }
+            isLoading = false
+        } catch (e: SecurityException) {
+            // FIXED: Handle permission errors
+            errorMessage = "Permission denied: Cannot read this file"
+            isLoading = false
+            Toast.makeText(context, errorMessage, Toast.LENGTH_LONG).show()
+            onClose()
         } catch (e: Exception) {
-            Toast.makeText(context, "Failed to read file", Toast.LENGTH_SHORT).show()
+            // FIXED: Better error handling
+            errorMessage = "Failed to read file: ${e.message}"
+            isLoading = false
+            Toast.makeText(context, errorMessage, Toast.LENGTH_SHORT).show()
             onClose()
         }
+    }
+
+    // FIXED: Show loading state
+    if (isLoading) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .semantics { contentDescription = "Loading document" }
+        ) {
+            CircularProgressIndicator()
+        }
+        return
     }
 
     Column(
@@ -50,7 +75,9 @@ fun AccessibleTextEditor(
             text = "Editing: $fileName",
             style = MaterialTheme.typography.titleMedium,
             fontSize = (18 * fontScaleMultiplier).sp,
-            modifier = Modifier.padding(bottom = 8.dp)
+            modifier = Modifier
+                .padding(bottom = 8.dp)
+                .semantics { contentDescription = "File name: $fileName" }
         )
 
         OutlinedTextField(
@@ -60,7 +87,9 @@ fun AccessibleTextEditor(
                 .fillMaxWidth()
                 .weight(1f)
                 .semantics { contentDescription = "Document content. Type to edit." },
-            textStyle = LocalTextStyle.current.copy(fontSize = currentFontSize)
+            textStyle = LocalTextStyle.current.copy(fontSize = currentFontSize),
+            placeholder = { Text("Document content will appear here...") },
+            enabled = !isSaving
         )
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -71,8 +100,14 @@ fun AccessibleTextEditor(
         ) {
             Button(
                 onClick = onClose,
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant, contentColor = MaterialTheme.colorScheme.onSurfaceVariant),
-                modifier = Modifier.weight(1f).padding(end = 8.dp)
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                ),
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(end = 8.dp)
+                    .semantics { contentDescription = "Close editor button" }
             ) {
                 Text("Close", fontSize = currentFontSize)
             }
@@ -81,20 +116,36 @@ fun AccessibleTextEditor(
                 onClick = {
                     isSaving = true
                     try {
+                        // FIXED: Handle write permissions properly
                         context.contentResolver.openOutputStream(fileUri, "wt")?.use { outputStream ->
                             OutputStreamWriter(outputStream).use { writer ->
                                 writer.write(documentText)
                             }
                         }
                         Toast.makeText(context, "Saved Successfully", Toast.LENGTH_SHORT).show()
+                    } catch (e: SecurityException) {
+                        // FIXED: Handle write permission denied
+                        Toast.makeText(
+                            context,
+                            "Permission denied: Cannot save to this location",
+                            Toast.LENGTH_LONG
+                        ).show()
                     } catch (e: Exception) {
-                        Toast.makeText(context, "Failed to save file", Toast.LENGTH_SHORT).show()
+                        // FIXED: Better error handling
+                        Toast.makeText(
+                            context,
+                            "Failed to save file: ${e.message}",
+                            Toast.LENGTH_SHORT
+                        ).show()
                     } finally {
                         isSaving = false
                     }
                 },
                 enabled = !isSaving,
-                modifier = Modifier.weight(1f).padding(start = 8.dp).semantics { contentDescription = "Save changes to document" }
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(start = 8.dp)
+                    .semantics { contentDescription = "Save changes to document" }
             ) {
                 Text(if (isSaving) "Saving..." else "Save Changes", fontSize = currentFontSize)
             }
