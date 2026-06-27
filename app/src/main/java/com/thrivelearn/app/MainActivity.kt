@@ -1,6 +1,7 @@
 package com.thrivelearn.app
 
 import android.os.Bundle
+import android.view.KeyEvent
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -24,6 +25,9 @@ import java.io.OutputStreamWriter
 class MainActivity : ComponentActivity() {
     private lateinit var speechEngine: ThriveSpeechEngine
     private lateinit var ttsEngine: ThriveTextToSpeech
+    
+    // Hoisted state to track hardware button presses
+    private var volumeUpTriggerCount by mutableIntStateOf(0)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -43,11 +47,20 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier.fillMaxSize(),
                         color = MaterialTheme.colorScheme.background
                     ) {
-                        MainScreenLayout(speechEngine = speechEngine, ttsEngine = ttsEngine)
+                        MainScreenLayout(speechEngine, ttsEngine, volumeUpTriggerCount)
                     }
                 }
             }
         }
+    }
+
+    // Intercept hardware keys at the root OS level to guarantee execution
+    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_VOLUME_UP) {
+            volumeUpTriggerCount++
+            return true // Consume the event so system volume doesn't change
+        }
+        return super.onKeyDown(keyCode, event)
     }
 
     override fun onDestroy() {
@@ -57,7 +70,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun MainScreenLayout(speechEngine: ThriveSpeechEngine, ttsEngine: ThriveTextToSpeech) {
+fun MainScreenLayout(speechEngine: ThriveSpeechEngine, ttsEngine: ThriveTextToSpeech, volumeUpTriggerCount: Int) {
     var fontScaleMultiplier by remember { mutableFloatStateOf(1.0f) }
     var currentTab by remember { mutableIntStateOf(0) }
     
@@ -70,7 +83,6 @@ fun MainScreenLayout(speechEngine: ThriveSpeechEngine, ttsEngine: ThriveTextToSp
             TopAppBar(
                 title = { Text(if (currentTab == 0) "Workspace" else "Library", fontSize = (20 * fontScaleMultiplier).sp) },
                 actions = {
-                    // NEW: Dyslexia Font Toggle
                     IconButton(
                         onClick = { 
                             currentFont.value = if (currentFont.value == AppFontMode.STANDARD) AppFontMode.DYSLEXIA_FRIENDLY else AppFontMode.STANDARD
@@ -78,7 +90,6 @@ fun MainScreenLayout(speechEngine: ThriveSpeechEngine, ttsEngine: ThriveTextToSp
                         modifier = Modifier.semantics { contentDescription = "Toggle Dyslexia Friendly Font. Current is ${currentFont.value.name}" }
                     ) { Text("OD", fontSize = 18.sp, fontWeight = FontWeight.Bold) }
                     
-                    // High Contrast Toggle
                     IconButton(
                         onClick = { 
                             currentTheme.value = if (currentTheme.value == AppThemeMode.NORMAL) AppThemeMode.HIGH_CONTRAST else AppThemeMode.NORMAL
@@ -86,7 +97,6 @@ fun MainScreenLayout(speechEngine: ThriveSpeechEngine, ttsEngine: ThriveTextToSp
                         modifier = Modifier.semantics { contentDescription = "Toggle high contrast mode. Current is ${currentTheme.value.name}" }
                     ) { Text(if (currentTheme.value == AppThemeMode.NORMAL) "?" else "?", fontSize = 20.sp) }
                     
-                    // Text Size Toggle
                     IconButton(
                         onClick = { fontScaleMultiplier = if (fontScaleMultiplier >= 1.8f) 1.0f else fontScaleMultiplier + 0.2f },
                         modifier = Modifier.semantics { contentDescription = "Increase text size. Current scale is ${fontScaleMultiplier}x" }
@@ -110,7 +120,7 @@ fun MainScreenLayout(speechEngine: ThriveSpeechEngine, ttsEngine: ThriveTextToSp
     ) { innerPadding ->
         Box(modifier = Modifier.padding(innerPadding)) {
             if (currentTab == 0) {
-                AccessibleNoteScreenContent(speechEngine, ttsEngine, fontScaleMultiplier)
+                AccessibleNoteScreenContent(speechEngine, ttsEngine, fontScaleMultiplier, volumeUpTriggerCount)
             } else {
                 DocumentLibraryScreen(fontScaleMultiplier)
             }
@@ -119,7 +129,7 @@ fun MainScreenLayout(speechEngine: ThriveSpeechEngine, ttsEngine: ThriveTextToSp
 }
 
 @Composable
-fun AccessibleNoteScreenContent(speechEngine: ThriveSpeechEngine, ttsEngine: ThriveTextToSpeech, fontScaleMultiplier: Float) {
+fun AccessibleNoteScreenContent(speechEngine: ThriveSpeechEngine, ttsEngine: ThriveTextToSpeech, fontScaleMultiplier: Float, volumeUpTriggerCount: Int) {
     val context = LocalContext.current
     var noteText by remember { mutableStateOf("") }
     var isRecording by remember { mutableStateOf(false) }
@@ -128,6 +138,30 @@ fun AccessibleNoteScreenContent(speechEngine: ThriveSpeechEngine, ttsEngine: Thr
     
     val currentFontSize = (16 * fontScaleMultiplier).sp
     val currentFontFamily = MaterialTheme.typography.bodyLarge.fontFamily
+
+    // Execute dictation toggle when hardware button is pressed
+    LaunchedEffect(volumeUpTriggerCount) {
+        if (volumeUpTriggerCount > 0) {
+            if (isRecording) {
+                speechEngine.stopListening()
+                if (liveTranscription.isNotEmpty()) {
+                    noteText = "$noteText $liveTranscription".trim()
+                    liveTranscription = ""
+                }
+                isRecording = false
+                Toast.makeText(context, "Dictation Stopped", Toast.LENGTH_SHORT).show()
+            } else {
+                ttsEngine.stop()
+                isReading = false
+                speechEngine.startListening(
+                    onResult = { text -> liveTranscription = text },
+                    onError = { isRecording = false }
+                )
+                isRecording = true
+                Toast.makeText(context, "Dictation Started", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
 
     val saveDocumentLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("text/plain")
