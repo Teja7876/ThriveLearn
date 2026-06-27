@@ -2,18 +2,37 @@ package com.thrivelearn.app
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.thrivelearn.app.viewmodel.NoteViewModel
+import kotlinx.coroutines.launch
 
 @Composable
 fun SettingsScreen(onBack: () -> Unit) {
-    var selectedTheme by remember { mutableStateOf(AppThemeMode.NORMAL) }
-    var selectedFont by remember { mutableStateOf(AppFontMode.STANDARD) }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val settingsPreferences = ThriveLearnApp.settingsPreferences
+
+    // FIXED: Load saved settings
+    val themeMode = settingsPreferences.themeMode.collectAsState("NORMAL")
+    val fontMode = settingsPreferences.fontMode.collectAsState("STANDARD")
+    val speechRate = settingsPreferences.speechRate.collectAsState(0.9f)
+    val textSize = settingsPreferences.textSize.collectAsState(1.0f)
+    val autoSaveEnabled = settingsPreferences.autoSaveEnabled.collectAsState(true)
+
+    var selectedTheme by remember { mutableStateOf(themeMode.value) }
+    var selectedFont by remember { mutableStateOf(fontMode.value) }
+    var currentSpeechRate by remember { mutableStateOf(speechRate.value) }
+    var currentTextSize by remember { mutableStateOf(textSize.value) }
+    var autoSave by remember { mutableStateOf(autoSaveEnabled.value) }
 
     LazyColumn(
         modifier = Modifier
@@ -59,12 +78,14 @@ fun SettingsScreen(onBack: () -> Unit) {
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        listOf(
-                            AppThemeMode.NORMAL to "Standard",
-                            AppThemeMode.HIGH_CONTRAST to "High Contrast (WCAG AAA)"
-                        ).forEach { (theme, label) ->
+                        listOf("NORMAL" to "Standard", "HIGH_CONTRAST" to "High Contrast").forEach { (theme, label) ->
                             Button(
-                                onClick = { selectedTheme = theme },
+                                onClick = {
+                                    selectedTheme = theme
+                                    scope.launch {
+                                        settingsPreferences.saveThemeMode(theme)
+                                    }
+                                },
                                 modifier = Modifier
                                     .weight(1f)
                                     .semantics { contentDescription = label },
@@ -96,11 +117,16 @@ fun SettingsScreen(onBack: () -> Unit) {
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         listOf(
-                            AppFontMode.STANDARD to "Standard",
-                            AppFontMode.DYSLEXIA_FRIENDLY to "Dyslexia Friendly"
+                            "STANDARD" to "Standard",
+                            "DYSLEXIA_FRIENDLY" to "Dyslexia Friendly"
                         ).forEach { (font, label) ->
                             Button(
-                                onClick = { selectedFont = font },
+                                onClick = {
+                                    selectedFont = font
+                                    scope.launch {
+                                        settingsPreferences.saveFontMode(font)
+                                    }
+                                },
                                 modifier = Modifier
                                     .weight(1f)
                                     .semantics { contentDescription = label },
@@ -114,6 +140,109 @@ fun SettingsScreen(onBack: () -> Unit) {
                                 Text(label, fontSize = 12.sp)
                             }
                         }
+                    }
+                }
+            }
+        }
+
+        // FIXED: Voice & Audio Settings
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .semantics { contentDescription = "Voice and audio settings" }
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "🎤 Voice & Audio",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier
+                            .padding(bottom = 12.dp)
+                            .semantics { contentDescription = "Voice and audio section" }
+                    )
+
+                    // Speech Rate
+                    Text(
+                        text = "Speech Rate: ${"%,.1f".format(currentSpeechRate)}x",
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                    Slider(
+                        value = currentSpeechRate,
+                        onValueChange = { newRate ->
+                            currentSpeechRate = newRate
+                            scope.launch {
+                                settingsPreferences.saveSpeechRate(newRate)
+                            }
+                        },
+                        valueRange = 0.5f..2.0f,
+                        steps = 5,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .semantics { contentDescription = "Speech rate slider" }
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Text Size
+                    Text(
+                        text = "Text Size: ${"%,.1f".format(currentTextSize)}x",
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                    Slider(
+                        value = currentTextSize,
+                        onValueChange = { newSize ->
+                            currentTextSize = newSize
+                            scope.launch {
+                                settingsPreferences.saveTextSize(newSize)
+                            }
+                        },
+                        valueRange = 0.8f..2.0f,
+                        steps = 5,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .semantics { contentDescription = "Text size slider" }
+                    )
+                }
+            }
+        }
+
+        // FIXED: Auto-Save Settings
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .semantics { contentDescription = "Auto-save settings" }
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "💾 Auto-Save",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier
+                            .padding(bottom = 12.dp)
+                            .semantics { contentDescription = "Auto-save section" }
+                    )
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .semantics { contentDescription = "Auto-save toggle" },
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "Auto-save notes",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Switch(
+                            checked = autoSave,
+                            onCheckedChange = { newValue ->
+                                autoSave = newValue
+                                scope.launch {
+                                    settingsPreferences.setAutoSave(newValue)
+                                }
+                            }
+                        )
                     }
                 }
             }
@@ -172,20 +301,9 @@ fun SettingsScreen(onBack: () -> Unit) {
                             .semantics { contentDescription = "About section" }
                     )
 
-                    InfoRow(
-                        label = "App Name",
-                        value = "ThriveLearn"
-                    )
-
-                    InfoRow(
-                        label = "Version",
-                        value = "1.0.0"
-                    )
-
-                    InfoRow(
-                        label = "Purpose",
-                        value = "Accessible learning platform for PwD"
-                    )
+                    InfoRow(label = "App Name", value = "ThriveLearn")
+                    InfoRow(label = "Version", value = "1.0.0")
+                    InfoRow(label = "Purpose", value = "Accessible learning for PwD")
                 }
             }
         }

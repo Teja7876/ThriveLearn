@@ -1,6 +1,8 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    // FIXED: Add Kotlin Kapt for Room annotation processing
+    id("kotlin-kapt")
 }
 
 android {
@@ -39,4 +41,15 @@ dependencies {
     // Media3 (ExoPlayer)
     implementation("androidx.media3:media3-exoplayer:1.3.1")
     implementation("androidx.media3:media3-ui:1.3.1")
+
+    // FIXED: Room Database for note persistence
+    implementation("androidx.room:room-runtime:2.6.1")
+    kapt("androidx.room:room-compiler:2.6.1")
+    implementation("androidx.room:room-ktx:2.6.1")
+
+    // FIXED: DataStore for settings persistence
+    implementation("androidx.datastore:datastore-preferences:1.0.0")
+
+    // FIXED: ViewModel for state management
+    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.7.0")
 }
