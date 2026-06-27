@@ -26,10 +26,9 @@ fun DocumentLibraryScreen(fontScaleMultiplier: Float) {
     var selectedFiles by remember { mutableStateOf<List<Pair<String, Uri>>>(emptyList()) }
     var activeMediaUri by remember { mutableStateOf<Uri?>(null) }
     var activeMediaTitle by remember { mutableStateOf("") }
-    
-    // New State for Text Editor
     var activeDocumentUri by remember { mutableStateOf<Uri?>(null) }
     var activeDocumentTitle by remember { mutableStateOf("") }
+    var showSettings by remember { mutableStateOf(false) }
     
     val currentFontSize = (16 * fontScaleMultiplier).sp
 
@@ -40,57 +39,45 @@ fun DocumentLibraryScreen(fontScaleMultiplier: Float) {
         }
     }
 
-    // Full screen Text Editor overlay
+    if (showSettings) {
+        SettingsScreen(onBack = { showSettings = false })
+        return
+    }
+
     if (activeDocumentUri != null) {
-        AccessibleTextEditor(
-            fileUri = activeDocumentUri!!,
-            fileName = activeDocumentTitle,
-            fontScaleMultiplier = fontScaleMultiplier,
-            onClose = { activeDocumentUri = null }
-        )
+        AccessibleTextEditor(fileUri = activeDocumentUri!!, fileName = activeDocumentTitle, fontScaleMultiplier = fontScaleMultiplier, onClose = { activeDocumentUri = null })
         return
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Button(
-            onClick = { filePickerLauncher.launch(arrayOf("*/*")) },
-            modifier = Modifier.fillMaxWidth().height(64.dp).semantics {
-                contentDescription = "Open file browser to add a digital book, document, or media file"; role = Role.Button
-            },
-            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary)
-        ) { Text("Add File to Library", fontSize = currentFontSize) }
+        Button(onClick = { filePickerLauncher.launch(arrayOf("*/*")) }, modifier = Modifier.fillMaxWidth().height(64.dp)) { Text("Add File to Library", fontSize = currentFontSize) }
+        
+        Spacer(modifier = Modifier.height(8.dp))
+        
+        Button(onClick = { showSettings = true }, modifier = Modifier.fillMaxWidth()) { Text("Configure Hardware Buttons", fontSize = currentFontSize) }
 
         Spacer(modifier = Modifier.height(16.dp))
 
         if (activeMediaUri != null) {
             AccessibleMediaPlayer(mediaUri = activeMediaUri!!, mediaTitle = activeMediaTitle)
-            Spacer(modifier = Modifier.height(16.dp))
-            Button(
-                onClick = { activeMediaUri = null },
-                modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Close media player" }
-            ) { Text("Close Player", fontSize = currentFontSize) }
-            Spacer(modifier = Modifier.height(16.dp))
+            Button(onClick = { activeMediaUri = null }, modifier = Modifier.fillMaxWidth()) { Text("Close Player") }
         }
 
-        Text("Your Study Materials", style = MaterialTheme.typography.titleLarge, fontSize = (20 * fontScaleMultiplier).sp, color = MaterialTheme.colorScheme.onBackground, modifier = Modifier.padding(bottom = 8.dp))
-
-        LazyColumn(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Your Study Materials", style = MaterialTheme.typography.titleLarge)
+        LazyColumn(modifier = Modifier.fillMaxSize()) {
             items(selectedFiles) { file ->
-                Card(
-                    modifier = Modifier.fillMaxWidth().clickable {
-                        val mimeType = context.contentResolver.getType(file.second) ?: ""
-                        if (mimeType.startsWith("audio/") || mimeType.startsWith("video/")) {
-                            activeMediaUri = file.second
-                            activeMediaTitle = file.first
-                        } else if (mimeType == "text/plain") {
-                            activeDocumentUri = file.second
-                            activeDocumentTitle = file.first
-                        } else {
-                            openUniversalFile(context, file.second)
-                        }
-                    }.semantics { contentDescription = "Study material: ${file.first}. Double tap to open."; role = Role.Button },
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                ) { Text(text = file.first, fontSize = currentFontSize, modifier = Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                Card(modifier = Modifier.fillMaxWidth().clickable {
+                    val mimeType = context.contentResolver.getType(file.second) ?: ""
+                    if (mimeType.startsWith("audio/") || mimeType.startsWith("video/")) {
+                        activeMediaUri = file.second
+                        activeMediaTitle = file.first
+                    } else if (mimeType == "text/plain") {
+                        activeDocumentUri = file.second
+                        activeDocumentTitle = file.first
+                    } else {
+                        openUniversalFile(context, file.second)
+                    }
+                }) { Text(text = file.first, fontSize = currentFontSize, modifier = Modifier.padding(16.dp)) }
             }
         }
     }
@@ -110,5 +97,5 @@ private fun openUniversalFile(context: Context, uri: Uri) {
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     }
-    try { context.startActivity(intent) } catch (e: ActivityNotFoundException) { Toast.makeText(context, "No compatible application found to open this file type.", Toast.LENGTH_LONG).show() }
+    try { context.startActivity(intent) } catch (e: ActivityNotFoundException) { Toast.makeText(context, "No compatible application found.", Toast.LENGTH_LONG).show() }
 }
