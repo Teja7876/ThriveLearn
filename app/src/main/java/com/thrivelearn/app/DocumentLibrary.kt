@@ -26,6 +26,11 @@ fun DocumentLibraryScreen(fontScaleMultiplier: Float) {
     var selectedFiles by remember { mutableStateOf<List<Pair<String, Uri>>>(emptyList()) }
     var activeMediaUri by remember { mutableStateOf<Uri?>(null) }
     var activeMediaTitle by remember { mutableStateOf("") }
+    
+    // New State for Text Editor
+    var activeDocumentUri by remember { mutableStateOf<Uri?>(null) }
+    var activeDocumentTitle by remember { mutableStateOf("") }
+    
     val currentFontSize = (16 * fontScaleMultiplier).sp
 
     val filePickerLauncher = rememberLauncherForActivityResult(contract = ActivityResultContracts.OpenDocument()) { uri: Uri? ->
@@ -33,6 +38,17 @@ fun DocumentLibraryScreen(fontScaleMultiplier: Float) {
             val fileName = getFileNameFromUri(context, it) ?: "Unknown File"
             if (selectedFiles.none { file -> file.second == it }) { selectedFiles = selectedFiles + Pair(fileName, it) }
         }
+    }
+
+    // Full screen Text Editor overlay
+    if (activeDocumentUri != null) {
+        AccessibleTextEditor(
+            fileUri = activeDocumentUri!!,
+            fileName = activeDocumentTitle,
+            fontScaleMultiplier = fontScaleMultiplier,
+            onClose = { activeDocumentUri = null }
+        )
+        return
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
@@ -66,6 +82,9 @@ fun DocumentLibraryScreen(fontScaleMultiplier: Float) {
                         if (mimeType.startsWith("audio/") || mimeType.startsWith("video/")) {
                             activeMediaUri = file.second
                             activeMediaTitle = file.first
+                        } else if (mimeType == "text/plain") {
+                            activeDocumentUri = file.second
+                            activeDocumentTitle = file.first
                         } else {
                             openUniversalFile(context, file.second)
                         }
