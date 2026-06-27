@@ -1,7 +1,10 @@
 package com.thrivelearn.app
 
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardOptions
@@ -9,11 +12,13 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.thrivelearn.app.theme.*
+import java.io.OutputStreamWriter
 
 class MainActivity : ComponentActivity() {
     private lateinit var speechEngine: ThriveSpeechEngine
@@ -90,10 +95,29 @@ fun MainScreenLayout(speechEngine: ThriveSpeechEngine) {
 
 @Composable
 fun AccessibleNoteScreenContent(speechEngine: ThriveSpeechEngine, fontScaleMultiplier: Float) {
+    val context = LocalContext.current
     var noteText by remember { mutableStateOf("") }
     var isRecording by remember { mutableStateOf(false) }
     var liveTranscription by remember { mutableStateOf("") }
     val currentFontSize = (16 * fontScaleMultiplier).sp
+
+    // SAFF Export Intent Configuration
+    val saveDocumentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("text/plain")
+    ) { uri ->
+        uri?.let {
+            try {
+                context.contentResolver.openOutputStream(it)?.use { outputStream ->
+                    OutputStreamWriter(outputStream).use { writer ->
+                        writer.write(noteText)
+                    }
+                }
+                Toast.makeText(context, "Note Saved Successfully", Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                Toast.makeText(context, "Export Failed", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
 
     Column(
         modifier = Modifier.fillMaxSize().padding(16.dp),
@@ -110,42 +134,54 @@ fun AccessibleNoteScreenContent(speechEngine: ThriveSpeechEngine, fontScaleMulti
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        Card(
+        Row(
             modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Button(
-                    onClick = {
-                        if (isRecording) {
-                            speechEngine.stopListening()
-                            if (liveTranscription.isNotEmpty()) {
-                                noteText = "$noteText $liveTranscription".trim()
-                                liveTranscription = ""
-                            }
-                            isRecording = false
-                        } else {
-                            speechEngine.startListening(
-                                onResult = { text -> liveTranscription = text },
-                                onError = { errorMsg -> 
-                                    liveTranscription = ""
-                                    isRecording = false 
-                                }
-                            )
-                            isRecording = true
+            Button(
+                onClick = {
+                    if (isRecording) {
+                        speechEngine.stopListening()
+                        if (liveTranscription.isNotEmpty()) {
+                            noteText = "$noteText $liveTranscription".trim()
+                            liveTranscription = ""
                         }
-                    },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = if (isRecording) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary
-                    ),
-                    modifier = Modifier.fillMaxWidth().height(56.dp).semantics {
-                        contentDescription = if (isRecording) "Stop dictation" else "Start live speech to text"
-                        role = Role.Button
-                        liveRegion = LiveRegionMode.Polite
+                        isRecording = false
+                    } else {
+                        speechEngine.startListening(
+                            onResult = { text -> liveTranscription = text },
+                            onError = { isRecording = false }
+                        )
+                        isRecording = true
                     }
-                ) { Text(if (isRecording) "Stop Dictation" else "Start Live Dictation", fontSize = currentFontSize) }
-            }
+                },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (isRecording) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
+                ),
+                modifier = Modifier.weight(1f).height(56.dp).semantics {
+                    contentDescription = if (isRecording) "Stop dictation" else "Start live speech to text"
+                    role = Role.Button
+                }
+            ) { Text(if (isRecording) "Stop" else "Dictate", fontSize = currentFontSize) }
+
+            Button(
+                onClick = {
+                    if (noteText.isNotBlank()) {
+                        saveDocumentLauncher.launch("ThriveNote_${System.currentTimeMillis()}.txt")
+                    } else {
+                        Toast.makeText(context, "Note box is empty", Toast.LENGTH_SHORT).show()
+                    }
+                },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.secondary,
+                    contentColor = MaterialTheme.colorScheme.onSecondary
+                ),
+                modifier = Modifier.weight(1f).height(56.dp).semantics {
+                    contentDescription = "Save this note directly onto your phone storage"
+                    role = Role.Button
+                }
+            ) { Text("Save Note", fontSize = currentFontSize) }
         }
     }
 }
