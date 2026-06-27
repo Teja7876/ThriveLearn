@@ -14,6 +14,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.*
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -31,9 +32,13 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val currentTheme = remember { mutableStateOf(AppThemeMode.NORMAL) }
+            val currentFont = remember { mutableStateOf(AppFontMode.STANDARD) }
 
-            CompositionLocalProvider(LocalThemeMode provides currentTheme) {
-                ThriveLearnTheme(themeMode = currentTheme.value) {
+            CompositionLocalProvider(
+                LocalThemeMode provides currentTheme,
+                LocalFontMode provides currentFont
+            ) {
+                ThriveLearnTheme(themeMode = currentTheme.value, fontMode = currentFont.value) {
                     Surface(
                         modifier = Modifier.fillMaxSize(),
                         color = MaterialTheme.colorScheme.background
@@ -55,7 +60,9 @@ class MainActivity : ComponentActivity() {
 fun MainScreenLayout(speechEngine: ThriveSpeechEngine, ttsEngine: ThriveTextToSpeech) {
     var fontScaleMultiplier by remember { mutableFloatStateOf(1.0f) }
     var currentTab by remember { mutableIntStateOf(0) }
+    
     val currentTheme = LocalThemeMode.current
+    val currentFont = LocalFontMode.current
 
     Scaffold(
         topBar = {
@@ -63,12 +70,23 @@ fun MainScreenLayout(speechEngine: ThriveSpeechEngine, ttsEngine: ThriveTextToSp
             TopAppBar(
                 title = { Text(if (currentTab == 0) "Workspace" else "Library", fontSize = (20 * fontScaleMultiplier).sp) },
                 actions = {
+                    // NEW: Dyslexia Font Toggle
+                    IconButton(
+                        onClick = { 
+                            currentFont.value = if (currentFont.value == AppFontMode.STANDARD) AppFontMode.DYSLEXIA_FRIENDLY else AppFontMode.STANDARD
+                        },
+                        modifier = Modifier.semantics { contentDescription = "Toggle Dyslexia Friendly Font. Current is ${currentFont.value.name}" }
+                    ) { Text("OD", fontSize = 18.sp, fontWeight = FontWeight.Bold) }
+                    
+                    // High Contrast Toggle
                     IconButton(
                         onClick = { 
                             currentTheme.value = if (currentTheme.value == AppThemeMode.NORMAL) AppThemeMode.HIGH_CONTRAST else AppThemeMode.NORMAL
                         },
                         modifier = Modifier.semantics { contentDescription = "Toggle high contrast mode. Current is ${currentTheme.value.name}" }
                     ) { Text(if (currentTheme.value == AppThemeMode.NORMAL) "?" else "?", fontSize = 20.sp) }
+                    
+                    // Text Size Toggle
                     IconButton(
                         onClick = { fontScaleMultiplier = if (fontScaleMultiplier >= 1.8f) 1.0f else fontScaleMultiplier + 0.2f },
                         modifier = Modifier.semantics { contentDescription = "Increase text size. Current scale is ${fontScaleMultiplier}x" }
@@ -107,7 +125,9 @@ fun AccessibleNoteScreenContent(speechEngine: ThriveSpeechEngine, ttsEngine: Thr
     var isRecording by remember { mutableStateOf(false) }
     var isReading by remember { mutableStateOf(false) }
     var liveTranscription by remember { mutableStateOf("") }
+    
     val currentFontSize = (16 * fontScaleMultiplier).sp
+    val currentFontFamily = MaterialTheme.typography.bodyLarge.fontFamily
 
     val saveDocumentLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("text/plain")
@@ -131,8 +151,12 @@ fun AccessibleNoteScreenContent(speechEngine: ThriveSpeechEngine, ttsEngine: Thr
         OutlinedTextField(
             value = if (isRecording && liveTranscription.isNotEmpty()) "$noteText $liveTranscription" else noteText,
             onValueChange = { noteText = it },
-            label = { Text("Type or dictate notes here", fontSize = currentFontSize) },
-            textStyle = LocalTextStyle.current.copy(fontSize = currentFontSize, color = MaterialTheme.colorScheme.onBackground),
+            label = { Text("Type or dictate notes here", fontSize = currentFontSize, fontFamily = currentFontFamily) },
+            textStyle = LocalTextStyle.current.copy(
+                fontSize = currentFontSize, 
+                color = MaterialTheme.colorScheme.onBackground,
+                fontFamily = currentFontFamily
+            ),
             modifier = Modifier.fillMaxWidth().weight(1f).semantics { contentDescription = "Interactive study notebook pane" },
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done)
         )
@@ -171,7 +195,7 @@ fun AccessibleNoteScreenContent(speechEngine: ThriveSpeechEngine, ttsEngine: Thr
                         contentDescription = if (isRecording) "Stop dictation" else "Start live speech to text"
                         role = Role.Button
                     }
-                ) { Text(if (isRecording) "Stop" else "Dictate", fontSize = currentFontSize) }
+                ) { Text(if (isRecording) "Stop" else "Dictate", fontSize = currentFontSize, fontFamily = currentFontFamily) }
 
                 Button(
                     onClick = {
@@ -189,10 +213,9 @@ fun AccessibleNoteScreenContent(speechEngine: ThriveSpeechEngine, ttsEngine: Thr
                         contentDescription = "Save this note directly onto your phone storage"
                         role = Role.Button
                     }
-                ) { Text("Save Note", fontSize = currentFontSize) }
+                ) { Text("Save Note", fontSize = currentFontSize, fontFamily = currentFontFamily) }
             }
 
-            // New Large Accessibility Button for Reading Text Aloud
             Button(
                 onClick = {
                     if (isReading) {
@@ -213,7 +236,7 @@ fun AccessibleNoteScreenContent(speechEngine: ThriveSpeechEngine, ttsEngine: Thr
                     contentDescription = if (isReading) "Stop reading text aloud" else "Read entire note aloud"
                     role = Role.Button
                 }
-            ) { Text(if (isReading) "Stop Reading" else "Read Aloud", fontSize = currentFontSize) }
+            ) { Text(if (isReading) "Stop Reading" else "Read Aloud", fontSize = currentFontSize, fontFamily = currentFontFamily) }
         }
     }
 }
