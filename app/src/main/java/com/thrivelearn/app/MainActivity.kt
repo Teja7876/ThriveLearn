@@ -13,6 +13,7 @@ import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.thrivelearn.app.theme.*
 import java.io.File
 
 class MainActivity : ComponentActivity() {
@@ -23,24 +24,35 @@ class MainActivity : ComponentActivity() {
         audioEngine = ThriveAudioEngine(applicationContext)
 
         setContent {
-            MaterialTheme {
-                var isRecording by remember { mutableStateOf(false) }
-                val transcribedText by remember { mutableStateOf("") }
-                val outputFile = File(externalCacheDir, "study_note_recording.mp4")
+            // Step-by-step addition: Manage global application theme tracking state
+            val currentTheme = remember { mutableStateOf(AppThemeMode.NORMAL) }
 
-                AccessibleNoteScreen(
-                    isRecording = isRecording,
-                    transcribedText = transcribedText,
-                    onRecordToggle = {
-                        if (isRecording) {
-                            audioEngine.stopVoiceRecording()
-                            isRecording = false
-                        } else {
-                            audioEngine.startVoiceRecording(outputFile)
-                            isRecording = true
-                        }
+            CompositionLocalProvider(LocalThemeMode provides currentTheme) {
+                ThriveLearnTheme(themeMode = currentTheme.value) {
+                    var isRecording by remember { mutableStateOf(false) }
+                    val transcribedText by remember { mutableStateOf("") }
+                    val outputFile = File(externalCacheDir, "study_note_recording.mp4")
+
+                    // Ensures the background color changes correctly on toggle
+                    Surface(
+                        modifier = Modifier.fillMaxSize(),
+                        color = MaterialTheme.colorScheme.background
+                    ) {
+                        AccessibleNoteScreen(
+                            isRecording = isRecording,
+                            transcribedText = transcribedText,
+                            onRecordToggle = {
+                                if (isRecording) {
+                                    audioEngine.stopVoiceRecording()
+                                    isRecording = false
+                                } else {
+                                    audioEngine.startVoiceRecording(outputFile)
+                                    isRecording = true
+                                }
+                            }
+                        )
                     }
-                )
+                }
             }
         }
     }
@@ -55,6 +67,7 @@ fun AccessibleNoteScreen(
 ) {
     var noteText by remember { mutableStateOf("") }
     var fontScaleMultiplier by remember { mutableFloatStateOf(1.0f) }
+    val currentTheme = LocalThemeMode.current
     val currentFontSize = (16 * fontScaleMultiplier).sp
 
     Scaffold(
@@ -62,6 +75,20 @@ fun AccessibleNoteScreen(
             TopAppBar(
                 title = { Text("ThriveLearn Workspace", fontSize = (20 * fontScaleMultiplier).sp) },
                 actions = {
+                    // Added feature: High contrast theme selection control
+                    IconButton(
+                        onClick = { 
+                            currentTheme.value = if (currentTheme.value == AppThemeMode.NORMAL) 
+                                AppThemeMode.HIGH_CONTRAST else AppThemeMode.NORMAL
+                        },
+                        modifier = Modifier.semantics { 
+                            contentDescription = "Toggle high contrast contrast mode. Current setting is ${currentTheme.value.name}"
+                            role = Role.Button
+                        }
+                    ) {
+                        Text(if (currentTheme.value == AppThemeMode.NORMAL) "☀" else "☾", fontSize = 20.sp)
+                    }
+                    
                     IconButton(
                         onClick = { 
                             fontScaleMultiplier = if (fontScaleMultiplier >= 1.8f) 1.0f else fontScaleMultiplier + 0.2f 
@@ -73,9 +100,13 @@ fun AccessibleNoteScreen(
                     ) {
                         Text("A+", fontSize = 16.sp)
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                )
             )
-        }
+        },
+        containerColor = MaterialTheme.colorScheme.background
     ) { innerPadding ->
         Column(
             modifier = Modifier
@@ -88,7 +119,10 @@ fun AccessibleNoteScreen(
                 value = noteText,
                 onValueChange = { noteText = it },
                 label = { Text("Type or view notes here", fontSize = currentFontSize) },
-                textStyle = LocalTextStyle.current.copy(fontSize = currentFontSize),
+                textStyle = LocalTextStyle.current.copy(
+                    fontSize = currentFontSize,
+                    color = MaterialTheme.colorScheme.onBackground
+                ),
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
@@ -110,6 +144,7 @@ fun AccessibleNoteScreen(
                         Text(
                             text = "Latest Transcription: $transcribedText",
                             fontSize = currentFontSize,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(bottom = 12.dp)
                         )
                     }
@@ -117,7 +152,8 @@ fun AccessibleNoteScreen(
                     Button(
                         onClick = onRecordToggle,
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = if (isRecording) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                            containerColor = if (isRecording) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary
                         ),
                         modifier = Modifier
                             .fillMaxWidth()
