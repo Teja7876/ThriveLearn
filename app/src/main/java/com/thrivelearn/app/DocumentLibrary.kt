@@ -1,8 +1,11 @@
 package com.thrivelearn.app
 
+import android.content.ActivityNotFoundException
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import android.provider.OpenableColumns
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -22,17 +25,18 @@ fun DocumentLibraryScreen(
     fontScaleMultiplier: Float
 ) {
     val context = LocalContext.current
-    // State to hold the list of chosen files (Name and Path)
     var selectedFiles by remember { mutableStateOf<List<Pair<String, Uri>>>(emptyList()) }
     val currentFontSize = (16 * fontScaleMultiplier).sp
 
-    // SAF File Picker Intent
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         uri?.let {
             val fileName = getFileNameFromUri(context, it) ?: "Unknown File"
-            selectedFiles = selectedFiles + Pair(fileName, it)
+            // Prevent duplicates
+            if (selectedFiles.none { file -> file.second == it }) {
+                selectedFiles = selectedFiles + Pair(fileName, it)
+            }
         }
     }
 
@@ -42,15 +46,12 @@ fun DocumentLibraryScreen(
             .padding(16.dp)
     ) {
         Button(
-            onClick = { 
-                // arrayOf("*/*") allows selecting any file type. You can restrict this to "application/pdf" etc.
-                filePickerLauncher.launch(arrayOf("*/*")) 
-            },
+            onClick = { filePickerLauncher.launch(arrayOf("*/*")) },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(64.dp)
                 .semantics {
-                    contentDescription = "Open file browser to add a digital book or media file"
+                    contentDescription = "Open file browser to add a digital book, document, or media file"
                     role = Role.Button
                 },
             colors = ButtonDefaults.buttonColors(
@@ -71,7 +72,6 @@ fun DocumentLibraryScreen(
             modifier = Modifier.padding(bottom = 8.dp)
         )
 
-        // Accessible scrollable list of selected files
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -80,9 +80,9 @@ fun DocumentLibraryScreen(
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { /* Next Step: Integrate PDF/Media Viewers here */ }
+                        .clickable { openUniversalFile(context, file.second) }
                         .semantics {
-                            contentDescription = "Study material: ${file.first}. Double tap to open."
+                            contentDescription = "Study material: ${file.first}. Double tap to open in an external viewer."
                             role = Role.Button
                         },
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
@@ -99,7 +99,6 @@ fun DocumentLibraryScreen(
     }
 }
 
-// Helper function to extract the real file name from Android's secure URI content provider
 private fun getFileNameFromUri(context: Context, uri: Uri): String? {
     var fileName: String? = null
     val cursor = context.contentResolver.query(uri, null, null, null, null)
@@ -112,4 +111,23 @@ private fun getFileNameFromUri(context: Context, uri: Uri): String? {
         }
     }
     return fileName
+}
+
+// Critical Engine: Routes any file type to the correct, accessible OS application
+private fun openUniversalFile(context: Context, uri: Uri) {
+    val mimeType = context.contentResolver.getType(uri) ?: "*/*"
+    
+    val intent = Intent(Intent.ACTION_VIEW).apply {
+        setDataAndType(uri, mimeType)
+        // Required to grant the viewing app permission to read this specific file
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+
+    try {
+        context.startActivity(intent)
+    } catch (e: ActivityNotFoundException) {
+        // Fallback if the user does not have an app installed capable of opening the file (e.g., no PDF reader)
+        Toast.makeText(context, "No compatible application found to open this file type.", Toast.LENGTH_LONG).show()
+    }
 }
