@@ -14,14 +14,13 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.thrivelearn.app.theme.*
-import java.io.File
 
 class MainActivity : ComponentActivity() {
-    private lateinit var audioEngine: ThriveAudioEngine
+    private lateinit var speechEngine: ThriveSpeechEngine
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        audioEngine = ThriveAudioEngine(applicationContext)
+        speechEngine = ThriveSpeechEngine(applicationContext)
 
         setContent {
             val currentTheme = remember { mutableStateOf(AppThemeMode.NORMAL) }
@@ -32,7 +31,7 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier.fillMaxSize(),
                         color = MaterialTheme.colorScheme.background
                     ) {
-                        MainScreenLayout(audioEngine = audioEngine)
+                        MainScreenLayout(speechEngine = speechEngine)
                     }
                 }
             }
@@ -41,44 +40,27 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun MainScreenLayout(audioEngine: ThriveAudioEngine) {
-    // Shared State
+fun MainScreenLayout(speechEngine: ThriveSpeechEngine) {
     var fontScaleMultiplier by remember { mutableFloatStateOf(1.0f) }
-    var currentTab by remember { mutableIntStateOf(0) } // 0 = Notes, 1 = Library
+    var currentTab by remember { mutableIntStateOf(0) }
     val currentTheme = LocalThemeMode.current
 
     Scaffold(
         topBar = {
             @OptIn(ExperimentalMaterial3Api::class)
             TopAppBar(
-                title = { 
-                    Text(
-                        text = if (currentTab == 0) "Workspace" else "Library", 
-                        fontSize = (20 * fontScaleMultiplier).sp
-                    ) 
-                },
+                title = { Text(if (currentTab == 0) "Workspace" else "Library", fontSize = (20 * fontScaleMultiplier).sp) },
                 actions = {
                     IconButton(
                         onClick = { 
-                            currentTheme.value = if (currentTheme.value == AppThemeMode.NORMAL) 
-                                AppThemeMode.HIGH_CONTRAST else AppThemeMode.NORMAL
+                            currentTheme.value = if (currentTheme.value == AppThemeMode.NORMAL) AppThemeMode.HIGH_CONTRAST else AppThemeMode.NORMAL
                         },
-                        modifier = Modifier.semantics { 
-                            contentDescription = "Toggle high contrast mode. Current is ${currentTheme.value.name}"
-                        }
-                    ) {
-                        Text(if (currentTheme.value == AppThemeMode.NORMAL) "☀" else "☾", fontSize = 20.sp)
-                    }
+                        modifier = Modifier.semantics { contentDescription = "Toggle high contrast mode. Current is ${currentTheme.value.name}" }
+                    ) { Text(if (currentTheme.value == AppThemeMode.NORMAL) "?" else "?", fontSize = 20.sp) }
                     IconButton(
-                        onClick = { 
-                            fontScaleMultiplier = if (fontScaleMultiplier >= 1.8f) 1.0f else fontScaleMultiplier + 0.2f 
-                        },
-                        modifier = Modifier.semantics { 
-                            contentDescription = "Increase text size. Current scale is ${fontScaleMultiplier}x"
-                        }
-                    ) {
-                        Text("A+", fontSize = 16.sp)
-                    }
+                        onClick = { fontScaleMultiplier = if (fontScaleMultiplier >= 1.8f) 1.0f else fontScaleMultiplier + 0.2f },
+                        modifier = Modifier.semantics { contentDescription = "Increase text size. Current scale is ${fontScaleMultiplier}x" }
+                    ) { Text("A+", fontSize = 16.sp) }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
             )
@@ -86,17 +68,11 @@ fun MainScreenLayout(audioEngine: ThriveAudioEngine) {
         bottomBar = {
             NavigationBar {
                 NavigationBarItem(
-                    icon = { Text("📝") },
-                    label = { Text("Notes") },
-                    selected = currentTab == 0,
-                    onClick = { currentTab = 0 },
+                    icon = { Text("??") }, label = { Text("Notes") }, selected = currentTab == 0, onClick = { currentTab = 0 },
                     modifier = Modifier.semantics { contentDescription = "Switch to Note Taking Workspace" }
                 )
                 NavigationBarItem(
-                    icon = { Text("📚") },
-                    label = { Text("Library") },
-                    selected = currentTab == 1,
-                    onClick = { currentTab = 1 },
+                    icon = { Text("??") }, label = { Text("Library") }, selected = currentTab == 1, onClick = { currentTab = 1 },
                     modifier = Modifier.semantics { contentDescription = "Switch to Document and Media Library" }
                 )
             }
@@ -104,26 +80,7 @@ fun MainScreenLayout(audioEngine: ThriveAudioEngine) {
     ) { innerPadding ->
         Box(modifier = Modifier.padding(innerPadding)) {
             if (currentTab == 0) {
-                // We hoist the recording state here so it survives tab switching
-                var isRecording by remember { mutableStateOf(false) }
-                val transcribedText by remember { mutableStateOf("") }
-                val context = androidx.compose.ui.platform.LocalContext.current
-                val outputFile = remember { File(context.externalCacheDir, "study_note_recording.mp4") }
-
-                AccessibleNoteScreenContent(
-                    isRecording = isRecording,
-                    transcribedText = transcribedText,
-                    fontScaleMultiplier = fontScaleMultiplier,
-                    onRecordToggle = {
-                        if (isRecording) {
-                            audioEngine.stopVoiceRecording()
-                            isRecording = false
-                        } else {
-                            audioEngine.startVoiceRecording(outputFile)
-                            isRecording = true
-                        }
-                    }
-                )
+                AccessibleNoteScreenContent(speechEngine = speechEngine, fontScaleMultiplier = fontScaleMultiplier)
             } else {
                 DocumentLibraryScreen(fontScaleMultiplier = fontScaleMultiplier)
             }
@@ -132,33 +89,22 @@ fun MainScreenLayout(audioEngine: ThriveAudioEngine) {
 }
 
 @Composable
-fun AccessibleNoteScreenContent(
-    isRecording: Boolean,
-    transcribedText: String,
-    fontScaleMultiplier: Float,
-    onRecordToggle: () -> Unit
-) {
+fun AccessibleNoteScreenContent(speechEngine: ThriveSpeechEngine, fontScaleMultiplier: Float) {
     var noteText by remember { mutableStateOf("") }
+    var isRecording by remember { mutableStateOf(false) }
+    var liveTranscription by remember { mutableStateOf("") }
     val currentFontSize = (16 * fontScaleMultiplier).sp
 
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
+        modifier = Modifier.fillMaxSize().padding(16.dp),
         verticalArrangement = Arrangement.SpaceBetween
     ) {
         OutlinedTextField(
-            value = noteText,
+            value = if (isRecording && liveTranscription.isNotEmpty()) "$noteText $liveTranscription" else noteText,
             onValueChange = { noteText = it },
-            label = { Text("Type or view notes here", fontSize = currentFontSize) },
-            textStyle = LocalTextStyle.current.copy(
-                fontSize = currentFontSize,
-                color = MaterialTheme.colorScheme.onBackground
-            ),
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                .semantics { contentDescription = "Interactive study notebook pane" },
+            label = { Text("Type or dictate notes here", fontSize = currentFontSize) },
+            textStyle = LocalTextStyle.current.copy(fontSize = currentFontSize, color = MaterialTheme.colorScheme.onBackground),
+            modifier = Modifier.fillMaxWidth().weight(1f).semantics { contentDescription = "Interactive study notebook pane" },
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done)
         )
 
@@ -168,36 +114,37 @@ fun AccessibleNoteScreenContent(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
         ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                if (transcribedText.isNotEmpty()) {
-                    Text(
-                        text = "Latest Transcription: $transcribedText",
-                        fontSize = currentFontSize,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(bottom = 12.dp)
-                    )
-                }
-
+            Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Button(
-                    onClick = onRecordToggle,
+                    onClick = {
+                        if (isRecording) {
+                            speechEngine.stopListening()
+                            if (liveTranscription.isNotEmpty()) {
+                                noteText = "$noteText $liveTranscription".trim()
+                                liveTranscription = ""
+                            }
+                            isRecording = false
+                        } else {
+                            speechEngine.startListening(
+                                onResult = { text -> liveTranscription = text },
+                                onError = { errorMsg -> 
+                                    liveTranscription = ""
+                                    isRecording = false 
+                                }
+                            )
+                            isRecording = true
+                        }
+                    },
                     colors = ButtonDefaults.buttonColors(
                         containerColor = if (isRecording) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
                         contentColor = MaterialTheme.colorScheme.onPrimary
                     ),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp)
-                        .semantics {
-                            contentDescription = if (isRecording) "Stop recording" else "Start high quality recording"
-                            role = Role.Button
-                            liveRegion = LiveRegionMode.Polite
-                        }
-                ) {
-                    Text(if (isRecording) "Stop Recording" else "Start Accessible Recording", fontSize = currentFontSize)
-                }
+                    modifier = Modifier.fillMaxWidth().height(56.dp).semantics {
+                        contentDescription = if (isRecording) "Stop dictation" else "Start live speech to text"
+                        role = Role.Button
+                        liveRegion = LiveRegionMode.Polite
+                    }
+                ) { Text(if (isRecording) "Stop Dictation" else "Start Live Dictation", fontSize = currentFontSize) }
             }
         }
     }
