@@ -1,10 +1,7 @@
 package com.thrivelearn.app
 
-import android.view.KeyEvent
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -12,211 +9,249 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.thrivelearn.app.theme.AppThemeMode
-import com.thrivelearn.app.theme.AppFontMode
-import com.thrivelearn.app.theme.LocalThemeMode
-import com.thrivelearn.app.theme.LocalFontMode
 
 @Composable
 fun SettingsScreen(onBack: () -> Unit) {
-    val themeMode = LocalThemeMode.current
-    val fontMode = LocalFontMode.current
-    var dictateKeyName by remember { mutableStateOf("Volume Up") }
-    var saveKeyName by remember { mutableStateOf("Volume Down") }
-    var readAloudKeyName by remember { mutableStateOf("Power Button") }
+    var selectedTheme by remember { mutableStateOf(AppThemeMode.NORMAL) }
+    var selectedFont by remember { mutableStateOf(AppFontMode.STANDARD) }
 
-    Column(
+    LazyColumn(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp)
-            .verticalScroll(rememberScrollState())
-            .semantics { contentDescription = "Settings screen for accessibility options" }
+            .semantics { contentDescription = "Settings screen" },
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Header
+        item {
+            Text(
+                text = "⚙️ Settings",
+                style = MaterialTheme.typography.headlineMedium,
+                modifier = Modifier.semantics { contentDescription = "Settings title" }
+            )
+        }
+
+        // FIXED: Accessibility Options Section
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .semantics { contentDescription = "Accessibility options" }
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "♿ Accessibility",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier
+                            .padding(bottom = 12.dp)
+                            .semantics { contentDescription = "Accessibility section" }
+                    )
+
+                    // Theme Selection
+                    Text(
+                        text = "Display Theme",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier
+                            .padding(bottom = 8.dp)
+                            .semantics { contentDescription = "Theme selection label" }
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        listOf(
+                            AppThemeMode.NORMAL to "Standard",
+                            AppThemeMode.HIGH_CONTRAST to "High Contrast (WCAG AAA)"
+                        ).forEach { (theme, label) ->
+                            Button(
+                                onClick = { selectedTheme = theme },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .semantics { contentDescription = label },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (selectedTheme == theme)
+                                        MaterialTheme.colorScheme.primary
+                                    else
+                                        MaterialTheme.colorScheme.surfaceVariant
+                                )
+                            ) {
+                                Text(label, fontSize = 12.sp)
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Font Selection
+                    Text(
+                        text = "Font Style",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier
+                            .padding(bottom = 8.dp)
+                            .semantics { contentDescription = "Font selection label" }
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        listOf(
+                            AppFontMode.STANDARD to "Standard",
+                            AppFontMode.DYSLEXIA_FRIENDLY to "Dyslexia Friendly"
+                        ).forEach { (font, label) ->
+                            Button(
+                                onClick = { selectedFont = font },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .semantics { contentDescription = label },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (selectedFont == font)
+                                        MaterialTheme.colorScheme.primary
+                                    else
+                                        MaterialTheme.colorScheme.surfaceVariant
+                                )
+                            ) {
+                                Text(label, fontSize = 12.sp)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // FIXED: Hardware Button Configuration
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .semantics { contentDescription = "Hardware button configuration" }
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "⌨️ Hardware Buttons",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier
+                            .padding(bottom = 12.dp)
+                            .semantics { contentDescription = "Hardware buttons section" }
+                    )
+
+                    HardwareButtonInfo(
+                        action = "Dictate",
+                        defaultKey = "Volume Up",
+                        description = "Press to start/stop voice recording"
+                    )
+
+                    HardwareButtonInfo(
+                        action = "Save",
+                        defaultKey = "Volume Down",
+                        description = "Press to save current note"
+                    )
+
+                    HardwareButtonInfo(
+                        action = "Read Aloud",
+                        defaultKey = "Power Button",
+                        description = "Press to read current note aloud"
+                    )
+                }
+            }
+        }
+
+        // FIXED: App Information
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .semantics { contentDescription = "App information" }
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "ℹ️ About",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier
+                            .padding(bottom = 12.dp)
+                            .semantics { contentDescription = "About section" }
+                    )
+
+                    InfoRow(
+                        label = "App Name",
+                        value = "ThriveLearn"
+                    )
+
+                    InfoRow(
+                        label = "Version",
+                        value = "1.0.0"
+                    )
+
+                    InfoRow(
+                        label = "Purpose",
+                        value = "Accessible learning platform for PwD"
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun HardwareButtonInfo(
+    action: String,
+    defaultKey: String,
+    description: String,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(bottom = 12.dp)
+            .semantics { contentDescription = "$action button configuration" }
+    ) {
         Text(
-            "Accessibility Settings",
-            style = MaterialTheme.typography.headlineSmall,
-            modifier = Modifier
-                .padding(bottom = 16.dp)
-                .semantics { contentDescription = "Accessibility Settings header" }
+            text = action,
+            style = MaterialTheme.typography.labelMedium,
+            modifier = Modifier.padding(bottom = 4.dp)
         )
 
-        // FIXED: Theme Toggle
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 12.dp)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text(
-                    "Display Theme",
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.semantics { contentDescription = "Display Theme section" }
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Button(
-                    onClick = {
-                        themeMode.value = if (themeMode.value == AppThemeMode.NORMAL) {
-                            AppThemeMode.HIGH_CONTRAST
-                        } else {
-                            AppThemeMode.NORMAL
-                        }
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .semantics {
-                            contentDescription =
-                                "Toggle high contrast theme. Current: ${themeMode.value.name}"
-                        }
-                ) {
-                    Text(
-                        "${themeMode.value.name} Mode",
-                        fontSize = 14.sp
-                    )
-                }
-            }
-        }
-
-        // FIXED: Font Mode Toggle
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 12.dp)
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text(
-                    "Font Mode",
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.semantics { contentDescription = "Font Mode section" }
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Button(
-                    onClick = {
-                        fontMode.value = if (fontMode.value == AppFontMode.STANDARD) {
-                            AppFontMode.DYSLEXIA_FRIENDLY
-                        } else {
-                            AppFontMode.STANDARD
-                        }
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .semantics {
-                            contentDescription =
-                                "Toggle dyslexia-friendly font. Current: ${fontMode.value.name}"
-                        }
-                ) {
-                    Text(
-                        "${fontMode.value.name} Font",
-                        fontSize = 14.sp
-                    )
-                }
-            }
-        }
-
-        // FIXED: Hardware Button Mapping
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 12.dp)
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text(
-                    "Hardware Button Mapping",
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.semantics { contentDescription = "Hardware Button Mapping section" }
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Dictate Key Mapping
-                Text(
-                    "Dictation Button (Currently: $dictateKeyName)",
-                    style = MaterialTheme.typography.labelMedium,
-                    modifier = Modifier.semantics { contentDescription = "Dictation button setting" }
-                )
-                Button(
-                    onClick = { HardwareActionManager.remapKey(AppAction.DICTATE, KeyEvent.KEYCODE_VOLUME_UP) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 4.dp)
-                ) {
-                    Text("Volume Up")
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // Save Key Mapping
-                Text(
-                    "Save Button (Currently: $saveKeyName)",
-                    style = MaterialTheme.typography.labelMedium,
-                    modifier = Modifier.semantics { contentDescription = "Save button setting" }
-                )
-                Button(
-                    onClick = { HardwareActionManager.remapKey(AppAction.SAVE, KeyEvent.KEYCODE_VOLUME_DOWN) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 4.dp)
-                ) {
-                    Text("Volume Down")
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // Read Aloud Key Mapping
-                Text(
-                    "Read Aloud Button (Currently: $readAloudKeyName)",
-                    style = MaterialTheme.typography.labelMedium,
-                    modifier = Modifier.semantics { contentDescription = "Read aloud button setting" }
-                )
-                Button(
-                    onClick = { HardwareActionManager.remapKey(AppAction.READ_ALOUD, KeyEvent.KEYCODE_POWER) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 4.dp)
-                ) {
-                    Text("Power Button")
-                }
-            }
-        }
-
-        // Info Card
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 12.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant
+            Text(
+                text = defaultKey,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary
             )
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text(
-                    "ℹ️ Tips",
-                    style = MaterialTheme.typography.labelLarge,
-                    modifier = Modifier.semantics { contentDescription = "Tips section" }
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    "• High Contrast mode improves visibility for low vision users\n" +
-                            "• Dyslexia-friendly font requires font file to be installed\n" +
-                            "• Hardware buttons can be remapped for your convenience\n" +
-                            "• Changes are saved automatically",
-                    style = MaterialTheme.typography.bodySmall,
-                    fontSize = 12.sp
-                )
-            }
-        }
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Back Button
-        Button(
-            onClick = onBack,
-            modifier = Modifier
-                .fillMaxWidth()
-                .semantics { contentDescription = "Back to library button" }
-        ) {
-            Text("Back to Library")
+            Text(
+                text = description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
+    }
+}
+
+@Composable
+fun InfoRow(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(bottom = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface
+        )
     }
 }
