@@ -22,10 +22,12 @@ import java.io.OutputStreamWriter
 
 class MainActivity : ComponentActivity() {
     private lateinit var speechEngine: ThriveSpeechEngine
+    private lateinit var ttsEngine: ThriveTextToSpeech
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         speechEngine = ThriveSpeechEngine(applicationContext)
+        ttsEngine = ThriveTextToSpeech(applicationContext)
 
         setContent {
             val currentTheme = remember { mutableStateOf(AppThemeMode.NORMAL) }
@@ -36,16 +38,21 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier.fillMaxSize(),
                         color = MaterialTheme.colorScheme.background
                     ) {
-                        MainScreenLayout(speechEngine = speechEngine)
+                        MainScreenLayout(speechEngine = speechEngine, ttsEngine = ttsEngine)
                     }
                 }
             }
         }
     }
+
+    override fun onDestroy() {
+        ttsEngine.shutdown()
+        super.onDestroy()
+    }
 }
 
 @Composable
-fun MainScreenLayout(speechEngine: ThriveSpeechEngine) {
+fun MainScreenLayout(speechEngine: ThriveSpeechEngine, ttsEngine: ThriveTextToSpeech) {
     var fontScaleMultiplier by remember { mutableFloatStateOf(1.0f) }
     var currentTab by remember { mutableIntStateOf(0) }
     val currentTheme = LocalThemeMode.current
@@ -85,32 +92,30 @@ fun MainScreenLayout(speechEngine: ThriveSpeechEngine) {
     ) { innerPadding ->
         Box(modifier = Modifier.padding(innerPadding)) {
             if (currentTab == 0) {
-                AccessibleNoteScreenContent(speechEngine = speechEngine, fontScaleMultiplier = fontScaleMultiplier)
+                AccessibleNoteScreenContent(speechEngine, ttsEngine, fontScaleMultiplier)
             } else {
-                DocumentLibraryScreen(fontScaleMultiplier = fontScaleMultiplier)
+                DocumentLibraryScreen(fontScaleMultiplier)
             }
         }
     }
 }
 
 @Composable
-fun AccessibleNoteScreenContent(speechEngine: ThriveSpeechEngine, fontScaleMultiplier: Float) {
+fun AccessibleNoteScreenContent(speechEngine: ThriveSpeechEngine, ttsEngine: ThriveTextToSpeech, fontScaleMultiplier: Float) {
     val context = LocalContext.current
     var noteText by remember { mutableStateOf("") }
     var isRecording by remember { mutableStateOf(false) }
+    var isReading by remember { mutableStateOf(false) }
     var liveTranscription by remember { mutableStateOf("") }
     val currentFontSize = (16 * fontScaleMultiplier).sp
 
-    // SAFF Export Intent Configuration
     val saveDocumentLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("text/plain")
     ) { uri ->
         uri?.let {
             try {
                 context.contentResolver.openOutputStream(it)?.use { outputStream ->
-                    OutputStreamWriter(outputStream).use { writer ->
-                        writer.write(noteText)
-                    }
+                    OutputStreamWriter(outputStream).use { writer -> writer.write(noteText) }
                 }
                 Toast.makeText(context, "Note Saved Successfully", Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
@@ -134,54 +139,81 @@ fun AccessibleNoteScreenContent(speechEngine: ThriveSpeechEngine, fontScaleMulti
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Button(
-                onClick = {
-                    if (isRecording) {
-                        speechEngine.stopListening()
-                        if (liveTranscription.isNotEmpty()) {
-                            noteText = "$noteText $liveTranscription".trim()
-                            liveTranscription = ""
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = {
+                        if (isRecording) {
+                            speechEngine.stopListening()
+                            if (liveTranscription.isNotEmpty()) {
+                                noteText = "$noteText $liveTranscription".trim()
+                                liveTranscription = ""
+                            }
+                            isRecording = false
+                        } else {
+                            ttsEngine.stop()
+                            isReading = false
+                            speechEngine.startListening(
+                                onResult = { text -> liveTranscription = text },
+                                onError = { isRecording = false }
+                            )
+                            isRecording = true
                         }
-                        isRecording = false
-                    } else {
-                        speechEngine.startListening(
-                            onResult = { text -> liveTranscription = text },
-                            onError = { isRecording = false }
-                        )
-                        isRecording = true
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (isRecording) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    ),
+                    modifier = Modifier.weight(1f).height(56.dp).semantics {
+                        contentDescription = if (isRecording) "Stop dictation" else "Start live speech to text"
+                        role = Role.Button
                     }
-                },
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (isRecording) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary
-                ),
-                modifier = Modifier.weight(1f).height(56.dp).semantics {
-                    contentDescription = if (isRecording) "Stop dictation" else "Start live speech to text"
-                    role = Role.Button
-                }
-            ) { Text(if (isRecording) "Stop" else "Dictate", fontSize = currentFontSize) }
+                ) { Text(if (isRecording) "Stop" else "Dictate", fontSize = currentFontSize) }
 
+                Button(
+                    onClick = {
+                        if (noteText.isNotBlank()) {
+                            saveDocumentLauncher.launch("ThriveNote_${System.currentTimeMillis()}.txt")
+                        } else {
+                            Toast.makeText(context, "Note box is empty", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.secondary,
+                        contentColor = MaterialTheme.colorScheme.onSecondary
+                    ),
+                    modifier = Modifier.weight(1f).height(56.dp).semantics {
+                        contentDescription = "Save this note directly onto your phone storage"
+                        role = Role.Button
+                    }
+                ) { Text("Save Note", fontSize = currentFontSize) }
+            }
+
+            // New Large Accessibility Button for Reading Text Aloud
             Button(
                 onClick = {
-                    if (noteText.isNotBlank()) {
-                        saveDocumentLauncher.launch("ThriveNote_${System.currentTimeMillis()}.txt")
+                    if (isReading) {
+                        ttsEngine.stop()
+                        isReading = false
+                    } else if (noteText.isNotBlank()) {
+                        ttsEngine.speak(noteText)
+                        isReading = true
                     } else {
-                        Toast.makeText(context, "Note box is empty", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "No text to read", Toast.LENGTH_SHORT).show()
                     }
                 },
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.secondary,
-                    contentColor = MaterialTheme.colorScheme.onSecondary
+                    containerColor = MaterialTheme.colorScheme.tertiary,
+                    contentColor = MaterialTheme.colorScheme.onTertiary
                 ),
-                modifier = Modifier.weight(1f).height(56.dp).semantics {
-                    contentDescription = "Save this note directly onto your phone storage"
+                modifier = Modifier.fillMaxWidth().height(56.dp).semantics {
+                    contentDescription = if (isReading) "Stop reading text aloud" else "Read entire note aloud"
                     role = Role.Button
                 }
-            ) { Text("Save Note", fontSize = currentFontSize) }
+            ) { Text(if (isReading) "Stop Reading" else "Read Aloud", fontSize = currentFontSize) }
         }
     }
 }
