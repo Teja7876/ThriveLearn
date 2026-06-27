@@ -1,36 +1,30 @@
 package com.thrivelearn.app
 
+import android.content.pm.ActivityInfo
 import android.os.Bundle
 import android.view.KeyEvent
 import android.widget.Toast
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.semantics.*
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.thrivelearn.app.theme.*
-import java.io.OutputStreamWriter
 
 class MainActivity : ComponentActivity() {
     private lateinit var speechEngine: ThriveSpeechEngine
     private lateinit var ttsEngine: ThriveTextToSpeech
-    
-    // Hoisted state to track hardware button presses
     private var volumeUpTriggerCount by mutableIntStateOf(0)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // FORCE PORTRAIT for stable mounting on wheelchairs/desk-arms
+        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        
         speechEngine = ThriveSpeechEngine(applicationContext)
         ttsEngine = ThriveTextToSpeech(applicationContext)
 
@@ -43,22 +37,18 @@ class MainActivity : ComponentActivity() {
                 LocalFontMode provides currentFont
             ) {
                 ThriveLearnTheme(themeMode = currentTheme.value, fontMode = currentFont.value) {
-                    Surface(
-                        modifier = Modifier.fillMaxSize(),
-                        color = MaterialTheme.colorScheme.background
-                    ) {
-                        MainScreenLayout(speechEngine, ttsEngine, volumeUpTriggerCount)
+                    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                        MainScreenLayout(speechEngine, ttsEngine, volumeUpTriggerCount) { volumeUpTriggerCount++ }
                     }
                 }
             }
         }
     }
 
-    // Intercept hardware keys at the root OS level to guarantee execution
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
         if (keyCode == KeyEvent.KEYCODE_VOLUME_UP) {
             volumeUpTriggerCount++
-            return true // Consume the event so system volume doesn't change
+            return true
         }
         return super.onKeyDown(keyCode, event)
     }
@@ -70,207 +60,36 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun MainScreenLayout(speechEngine: ThriveSpeechEngine, ttsEngine: ThriveTextToSpeech, volumeUpTriggerCount: Int) {
-    var fontScaleMultiplier by remember { mutableFloatStateOf(1.0f) }
-    var currentTab by remember { mutableIntStateOf(0) }
-    
-    val currentTheme = LocalThemeMode.current
-    val currentFont = LocalFontMode.current
-
-    Scaffold(
-        topBar = {
-            @OptIn(ExperimentalMaterial3Api::class)
-            TopAppBar(
-                title = { Text(if (currentTab == 0) "Workspace" else "Library", fontSize = (20 * fontScaleMultiplier).sp) },
-                actions = {
-                    IconButton(
-                        onClick = { 
-                            currentFont.value = if (currentFont.value == AppFontMode.STANDARD) AppFontMode.DYSLEXIA_FRIENDLY else AppFontMode.STANDARD
-                        },
-                        modifier = Modifier.semantics { contentDescription = "Toggle Dyslexia Friendly Font. Current is ${currentFont.value.name}" }
-                    ) { Text("OD", fontSize = 18.sp, fontWeight = FontWeight.Bold) }
-                    
-                    IconButton(
-                        onClick = { 
-                            currentTheme.value = if (currentTheme.value == AppThemeMode.NORMAL) AppThemeMode.HIGH_CONTRAST else AppThemeMode.NORMAL
-                        },
-                        modifier = Modifier.semantics { contentDescription = "Toggle high contrast mode. Current is ${currentTheme.value.name}" }
-                    ) { Text(if (currentTheme.value == AppThemeMode.NORMAL) "?" else "?", fontSize = 20.sp) }
-                    
-                    IconButton(
-                        onClick = { fontScaleMultiplier = if (fontScaleMultiplier >= 1.8f) 1.0f else fontScaleMultiplier + 0.2f },
-                        modifier = Modifier.semantics { contentDescription = "Increase text size. Current scale is ${fontScaleMultiplier}x" }
-                    ) { Text("A+", fontSize = 16.sp) }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-            )
-        },
-        bottomBar = {
-            NavigationBar {
-                NavigationBarItem(
-                    icon = { Text("??") }, label = { Text("Notes") }, selected = currentTab == 0, onClick = { currentTab = 0 },
-                    modifier = Modifier.semantics { contentDescription = "Switch to Note Taking Workspace" }
-                )
-                NavigationBarItem(
-                    icon = { Text("??") }, label = { Text("Library") }, selected = currentTab == 1, onClick = { currentTab = 1 },
-                    modifier = Modifier.semantics { contentDescription = "Switch to Document and Media Library" }
-                )
-            }
-        }
-    ) { innerPadding ->
-        Box(modifier = Modifier.padding(innerPadding)) {
-            if (currentTab == 0) {
-                AccessibleNoteScreenContent(speechEngine, ttsEngine, fontScaleMultiplier, volumeUpTriggerCount)
-            } else {
-                DocumentLibraryScreen(fontScaleMultiplier)
-            }
-        }
-    }
-}
-
-@Composable
-fun AccessibleNoteScreenContent(speechEngine: ThriveSpeechEngine, ttsEngine: ThriveTextToSpeech, fontScaleMultiplier: Float, volumeUpTriggerCount: Int) {
+fun MainScreenLayout(speechEngine: ThriveSpeechEngine, ttsEngine: ThriveTextToSpeech, volumeTrigger: Int, onTrigger: () -> Unit) {
     val context = LocalContext.current
-    var noteText by remember { mutableStateOf("") }
-    var isRecording by remember { mutableStateOf(false) }
-    var isReading by remember { mutableStateOf(false) }
-    var liveTranscription by remember { mutableStateOf("") }
+    var fontScale by remember { mutableFloatStateOf(1.0f) }
+    var currentTab by remember { mutableIntStateOf(0) }
+    val theme = LocalThemeMode.current
     
-    val currentFontSize = (16 * fontScaleMultiplier).sp
-    val currentFontFamily = MaterialTheme.typography.bodyLarge.fontFamily
-
-    // Execute dictation toggle when hardware button is pressed
-    LaunchedEffect(volumeUpTriggerCount) {
-        if (volumeUpTriggerCount > 0) {
-            if (isRecording) {
-                speechEngine.stopListening()
-                if (liveTranscription.isNotEmpty()) {
-                    noteText = "$noteText $liveTranscription".trim()
-                    liveTranscription = ""
-                }
-                isRecording = false
-                Toast.makeText(context, "Dictation Stopped", Toast.LENGTH_SHORT).show()
-            } else {
-                ttsEngine.stop()
-                isReading = false
-                speechEngine.startListening(
-                    onResult = { text -> liveTranscription = text },
-                    onError = { isRecording = false }
-                )
-                isRecording = true
-                Toast.makeText(context, "Dictation Started", Toast.LENGTH_SHORT).show()
+    // Global Gesture Handler: Left-Swipe (Tab Switch), Right-Swipe (Theme Toggle)
+    Box(modifier = Modifier.pointerInput(Unit) {
+        detectHorizontalDragGestures { _, dragAmount ->
+            if (dragAmount > 50) { // Right Swipe -> Toggle Theme
+                theme.value = if (theme.value == AppThemeMode.NORMAL) AppThemeMode.HIGH_CONTRAST else AppThemeMode.NORMAL
+                HapticManager.playVibration(context, 100)
+            } else if (dragAmount < -50) { // Left Swipe -> Toggle Tab
+                currentTab = if (currentTab == 0) 1 else 0
+                HapticManager.playVibration(context, 50)
             }
         }
-    }
-
-    val saveDocumentLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.CreateDocument("text/plain")
-    ) { uri ->
-        uri?.let {
-            try {
-                context.contentResolver.openOutputStream(it)?.use { outputStream ->
-                    OutputStreamWriter(outputStream).use { writer -> writer.write(noteText) }
+    }) {
+        Scaffold(
+            bottomBar = {
+                NavigationBar {
+                    NavigationBarItem(icon = { Text("??") }, label = { Text("Notes") }, selected = currentTab == 0, onClick = { currentTab = 0 })
+                    NavigationBarItem(icon = { Text("??") }, label = { Text("Library") }, selected = currentTab == 1, onClick = { currentTab = 1 })
                 }
-                Toast.makeText(context, "Note Saved Successfully", Toast.LENGTH_SHORT).show()
-            } catch (e: Exception) {
-                Toast.makeText(context, "Export Failed", Toast.LENGTH_SHORT).show()
             }
-        }
-    }
-
-    Column(
-        modifier = Modifier.fillMaxSize().padding(16.dp),
-        verticalArrangement = Arrangement.SpaceBetween
-    ) {
-        OutlinedTextField(
-            value = if (isRecording && liveTranscription.isNotEmpty()) "$noteText $liveTranscription" else noteText,
-            onValueChange = { noteText = it },
-            label = { Text("Type or dictate notes here", fontSize = currentFontSize, fontFamily = currentFontFamily) },
-            textStyle = LocalTextStyle.current.copy(
-                fontSize = currentFontSize, 
-                color = MaterialTheme.colorScheme.onBackground,
-                fontFamily = currentFontFamily
-            ),
-            modifier = Modifier.fillMaxWidth().weight(1f).semantics { contentDescription = "Interactive study notebook pane" },
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done)
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Button(
-                    onClick = {
-                        if (isRecording) {
-                            speechEngine.stopListening()
-                            if (liveTranscription.isNotEmpty()) {
-                                noteText = "$noteText $liveTranscription".trim()
-                                liveTranscription = ""
-                            }
-                            isRecording = false
-                        } else {
-                            ttsEngine.stop()
-                            isReading = false
-                            speechEngine.startListening(
-                                onResult = { text -> liveTranscription = text },
-                                onError = { isRecording = false }
-                            )
-                            isRecording = true
-                        }
-                    },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = if (isRecording) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary
-                    ),
-                    modifier = Modifier.weight(1f).height(56.dp).semantics {
-                        contentDescription = if (isRecording) "Stop dictation" else "Start live speech to text"
-                        role = Role.Button
-                    }
-                ) { Text(if (isRecording) "Stop" else "Dictate", fontSize = currentFontSize, fontFamily = currentFontFamily) }
-
-                Button(
-                    onClick = {
-                        if (noteText.isNotBlank()) {
-                            saveDocumentLauncher.launch("ThriveNote_${System.currentTimeMillis()}.txt")
-                        } else {
-                            Toast.makeText(context, "Note box is empty", Toast.LENGTH_SHORT).show()
-                        }
-                    },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.secondary,
-                        contentColor = MaterialTheme.colorScheme.onSecondary
-                    ),
-                    modifier = Modifier.weight(1f).height(56.dp).semantics {
-                        contentDescription = "Save this note directly onto your phone storage"
-                        role = Role.Button
-                    }
-                ) { Text("Save Note", fontSize = currentFontSize, fontFamily = currentFontFamily) }
+        ) { innerPadding ->
+            Box(modifier = Modifier.padding(innerPadding)) {
+                if (currentTab == 0) AccessibleNoteScreenContent(speechEngine, ttsEngine, fontScale, volumeTrigger)
+                else DocumentLibraryScreen(fontScale)
             }
-
-            Button(
-                onClick = {
-                    if (isReading) {
-                        ttsEngine.stop()
-                        isReading = false
-                    } else if (noteText.isNotBlank()) {
-                        ttsEngine.speak(noteText)
-                        isReading = true
-                    } else {
-                        Toast.makeText(context, "No text to read", Toast.LENGTH_SHORT).show()
-                    }
-                },
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.tertiary,
-                    contentColor = MaterialTheme.colorScheme.onTertiary
-                ),
-                modifier = Modifier.fillMaxWidth().height(56.dp).semantics {
-                    contentDescription = if (isReading) "Stop reading text aloud" else "Read entire note aloud"
-                    role = Role.Button
-                }
-            ) { Text(if (isReading) "Stop Reading" else "Read Aloud", fontSize = currentFontSize, fontFamily = currentFontFamily) }
         }
     }
 }
