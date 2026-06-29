@@ -4,37 +4,56 @@ import android.os.Bundle
 import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.viewModels
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import com.thrivelearn.app.theme.*
+import com.thrivelearn.app.accessibility.AccessibilityViewModel
+import com.thrivelearn.app.accessibility.LocalAccessibilityPrefs
+import com.thrivelearn.app.accessibility.LocalAccessibilityViewModel
+import com.thrivelearn.app.theme.ThriveLearnTheme
 
 class MainActivity : ComponentActivity() {
+
+    // ── Single ViewModel per process (survives rotation) ─────────────────────
+    private val accessibilityViewModel: AccessibilityViewModel by viewModels()
+
     private lateinit var speechEngine: ThriveSpeechEngine
     private lateinit var ttsEngine: ThriveTextToSpeech
-    
-    // State to trigger actions from hardware
-    var triggeredAction by mutableStateOf<AppAction?>(null)
+
+    var triggeredAction by androidx.compose.runtime.mutableStateOf<AppAction?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         speechEngine = ThriveSpeechEngine(applicationContext)
-        ttsEngine = ThriveTextToSpeech(applicationContext)
+        ttsEngine    = ThriveTextToSpeech(applicationContext)
 
         setContent {
-            val currentTheme = remember { mutableStateOf(AppThemeMode.NORMAL) }
-            val currentFont = remember { mutableStateOf(AppFontMode.STANDARD) }
+            // Observe the live prefs snapshot from the ViewModel
+            val prefs by accessibilityViewModel.uiState.collectAsState()
+            val isLoading by accessibilityViewModel.isLoading.collectAsState()
 
+            // Provide both the snapshot and the ViewModel to the entire tree
             CompositionLocalProvider(
-                LocalThemeMode provides currentTheme,
-                LocalFontMode provides currentFont
+                LocalAccessibilityViewModel provides accessibilityViewModel,
+                LocalAccessibilityPrefs     provides prefs
             ) {
-                ThriveLearnTheme(themeMode = currentTheme.value, fontMode = currentFont.value) {
-                    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                        MainScreenLayout(speechEngine, ttsEngine, triggeredAction) { triggeredAction = null }
+                ThriveLearnTheme(prefs = prefs) {
+                    Surface(
+                        modifier = Modifier.fillMaxSize(),
+                        color    = MaterialTheme.colorScheme.background
+                    ) {
+                        if (!isLoading) {
+                            MainScreenLayout(
+                                speechEngine    = speechEngine,
+                                ttsEngine       = ttsEngine,
+                                triggeredAction = triggeredAction,
+                                onActionConsumed = { triggeredAction = null }
+                            )
+                        }
                     }
                 }
             }
@@ -57,33 +76,71 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+// ── Main navigation scaffold ──────────────────────────────────────────────────
+
 @Composable
-fun MainScreenLayout(speechEngine: ThriveSpeechEngine, ttsEngine: ThriveTextToSpeech, triggeredAction: AppAction?, onActionConsumed: () -> Unit) {
-    var currentTab by remember { mutableIntStateOf(0) }
-    val tabs = listOf("Notes", "Materials")
-    
+fun MainScreenLayout(
+    speechEngine: ThriveSpeechEngine,
+    ttsEngine: ThriveTextToSpeech,
+    triggeredAction: AppAction?,
+    onActionConsumed: () -> Unit
+) {
+    val prefs = LocalAccessibilityPrefs.current
+
+    // In Focus Mode, hide the Settings tab from the bottom bar to simplify UI
+    var currentTab    by remember { mutableIntStateOf(0) }
+    var showSettings  by remember { mutableStateOf(false) }
+
+    val tabs = if (prefs.focusMode)
+        listOf("Notes", "Materials")
+    else
+        listOf("Notes", "Materials", "Tools")
+
+    if (showSettings) {
+        SettingsScreen(onBack = { showSettings = false })
+        return
+    }
+
     Scaffold(
         bottomBar = {
             NavigationBar {
                 tabs.forEachIndexed { index, label ->
                     NavigationBarItem(
                         selected = currentTab == index,
-                        onClick = { currentTab = index },
-                        label = { Text(label) },
-                        icon = { Text(if (index == 0) "Aa" else "File") },
+                        onClick  = { currentTab = index },
+                        label    = { Text(label) },
+                        icon     = {
+                            Text(
+                                when (index) {
+                                    0    -> "Aa"
+                                    1    -> "📄"
+                                    else -> "🤖"
+                                }
+                            )
+                        },
                         modifier = Modifier.semantics {
-                            contentDescription = "Open $label"
+                            contentDescription = "Open $label screen"
                         }
                     )
                 }
+                // Settings gear – always visible
+                NavigationBarItem(
+                    selected = false,
+                    onClick  = { showSettings = true },
+                    label    = { Text("Settings") },
+                    icon     = { Text("⚙") },
+                    modifier = Modifier.semantics {
+                        contentDescription = "Open Accessibility Settings"
+                    }
+                )
             }
         }
     ) { innerPadding ->
         Box(modifier = Modifier.padding(innerPadding)) {
-            if (currentTab == 0) {
-                AccessibleNoteScreenContent(speechEngine, ttsEngine, triggeredAction, onActionConsumed)
-            } else {
-                DocumentLibraryScreen(ttsEngine = ttsEngine)
+            when (currentTab) {
+                0    -> AccessibleNoteScreenContent(speechEngine, ttsEngine, triggeredAction, onActionConsumed)
+                1    -> DocumentLibraryScreen(ttsEngine = ttsEngine)
+                else -> AiToolsScreen(ttsEngine)
             }
         }
     }

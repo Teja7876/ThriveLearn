@@ -19,18 +19,18 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.thrivelearn.app.accessibility.LocalAccessibilityPrefs
 
 @Composable
-fun DocumentLibraryScreen(fontScaleMultiplier: Float = 1.0f, ttsEngine: ThriveTextToSpeech? = null) {
+fun DocumentLibraryScreen(fontScaleMultiplier: Float? = null, ttsEngine: ThriveTextToSpeech? = null) {
     val context = LocalContext.current
+    val activeFontScale = fontScaleMultiplier ?: LocalAccessibilityPrefs.current.textScale
     var selectedFiles by remember { mutableStateOf<List<Pair<String, Uri>>>(emptyList()) }
     var activeMediaUri by remember { mutableStateOf<Uri?>(null) }
     var activeMediaTitle by remember { mutableStateOf("") }
     var activeDocumentUri by remember { mutableStateOf<Uri?>(null) }
     var activeDocumentTitle by remember { mutableStateOf("") }
-    var showSettings by remember { mutableStateOf(false) }
-    
-    val currentFontSize = (16 * fontScaleMultiplier).sp
+    val currentFontSize = (16 * activeFontScale).sp
 
     val filePickerLauncher = rememberLauncherForActivityResult(contract = ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         uri?.let {
@@ -51,16 +51,11 @@ fun DocumentLibraryScreen(fontScaleMultiplier: Float = 1.0f, ttsEngine: ThriveTe
         }
     }
 
-    if (showSettings) {
-        SettingsScreen(onBack = { showSettings = false })
-        return
-    }
-
     if (activeDocumentUri != null) {
         AccessibleTextEditor(
             fileUri = activeDocumentUri!!,
             fileName = activeDocumentTitle,
-            fontScaleMultiplier = fontScaleMultiplier,
+            fontScaleMultiplier = activeFontScale,
             ttsEngine = ttsEngine,
             onClose = { activeDocumentUri = null }
         )
@@ -78,10 +73,6 @@ fun DocumentLibraryScreen(fontScaleMultiplier: Float = 1.0f, ttsEngine: ThriveTe
 
         Button(onClick = { filePickerLauncher.launch(arrayOf("text/*", "audio/*", "video/*", "application/pdf", "application/*")) }, modifier = Modifier.fillMaxWidth().height(64.dp)) { Text("Add File to Library", fontSize = currentFontSize) }
         
-        Spacer(modifier = Modifier.height(8.dp))
-        
-        Button(onClick = { showSettings = true }, modifier = Modifier.fillMaxWidth()) { Text("Configure Hardware Buttons", fontSize = currentFontSize) }
-
         Spacer(modifier = Modifier.height(16.dp))
 
         if (activeMediaUri != null) {

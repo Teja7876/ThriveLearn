@@ -26,6 +26,11 @@ fun AccessibleNoteScreenContent(speechEngine: ThriveSpeechEngine, ttsEngine: Thr
     var noteText by remember { mutableStateOf(savedNotes.getString("latest_note", "") ?: "") }
     var isRecording by remember { mutableStateOf(false) }
     var statusMessage by remember { mutableStateOf("Ready") }
+    var showFocusView by remember { mutableStateOf(false) }
+    var showKeyPoints by remember { mutableStateOf(false) }
+    var showChecklist by remember { mutableStateOf(false) }
+    var showReviewQuestions by remember { mutableStateOf(false) }
+    var completedChecklistItems by remember { mutableStateOf(setOf<Int>()) }
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) {
             startDictation(
@@ -146,6 +151,84 @@ fun AccessibleNoteScreenContent(speechEngine: ThriveSpeechEngine, ttsEngine: Thr
             modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
         ) {
             Text("Auto-Simplify Text")
+        }
+
+        Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = { showFocusView = !showFocusView }, modifier = Modifier.weight(1f)) {
+                Text(if (showFocusView) "Hide Focus" else "Focus View")
+            }
+            OutlinedButton(onClick = { showKeyPoints = !showKeyPoints }, modifier = Modifier.weight(1f)) {
+                Text(if (showKeyPoints) "Hide Points" else "Key Points")
+            }
+        }
+
+        Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = { showChecklist = !showChecklist }, modifier = Modifier.weight(1f)) {
+                Text(if (showChecklist) "Hide Tasks" else "Study Tasks")
+            }
+            OutlinedButton(onClick = { showReviewQuestions = !showReviewQuestions }, modifier = Modifier.weight(1f)) {
+                Text(if (showReviewQuestions) "Hide Quiz" else "Quiz Me")
+            }
+        }
+
+        if (showFocusView) {
+            StudyListPanel("Reading chunks", StudyAids.readingChunks(noteText), Modifier.padding(top = 12.dp))
+        }
+
+        if (showKeyPoints) {
+            StudyListPanel("Key points", StudyAids.keyPoints(noteText), Modifier.padding(top = 12.dp))
+        }
+
+        if (showChecklist) {
+            StudyChecklistPanel(
+                items = StudyAids.studyChecklist(noteText),
+                completedItems = completedChecklistItems,
+                onToggle = { index, checked ->
+                    completedChecklistItems = if (checked) {
+                        completedChecklistItems + index
+                    } else {
+                        completedChecklistItems - index
+                    }
+                }
+            )
+        }
+
+        if (showReviewQuestions) {
+            StudyListPanel("Review questions", StudyAids.reviewQuestions(noteText), Modifier.padding(top = 12.dp))
+        }
+    }
+}
+
+@Composable
+private fun StudyChecklistPanel(
+    items: List<String>,
+    completedItems: Set<Int>,
+    onToggle: (Int, Boolean) -> Unit
+) {
+    Column(modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) {
+        Text("Study tasks", style = MaterialTheme.typography.titleMedium)
+        if (items.isEmpty()) {
+            Text("Add text first.", modifier = Modifier.padding(top = 8.dp))
+        } else {
+            items.forEachIndexed { index, item ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 56.dp)
+                        .padding(top = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Checkbox(
+                        checked = completedItems.contains(index),
+                        onCheckedChange = { checked -> onToggle(index, checked) }
+                    )
+                    Text(
+                        text = item,
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier.weight(1f).padding(top = 12.dp)
+                    )
+                }
+            }
         }
     }
 }

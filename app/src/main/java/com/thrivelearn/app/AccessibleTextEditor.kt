@@ -2,7 +2,9 @@ package com.thrivelearn.app
 
 import android.net.Uri
 import android.widget.Toast
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -25,6 +27,8 @@ fun AccessibleTextEditor(
     val context = LocalContext.current
     var documentText by remember { mutableStateOf("") }
     var isSaving by remember { mutableStateOf(false) }
+    var showFocusView by remember { mutableStateOf(false) }
+    var showReviewQuestions by remember { mutableStateOf(false) }
     val currentFontSize = (16 * fontScaleMultiplier).sp
 
     // Load file contents when component launches
@@ -91,6 +95,30 @@ fun AccessibleTextEditor(
             ) {
                 Text("Simplify", fontSize = currentFontSize)
             }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        OutlinedButton(
+            onClick = { showFocusView = !showFocusView },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(if (showFocusView) "Hide Focus View" else "Show Focus View", fontSize = currentFontSize)
+        }
+
+        OutlinedButton(
+            onClick = { showReviewQuestions = !showReviewQuestions },
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+        ) {
+            Text(if (showReviewQuestions) "Hide Review Questions" else "Create Review Questions", fontSize = currentFontSize)
+        }
+
+        if (showFocusView) {
+            StudyListPanel("Reading chunks", StudyAids.readingChunks(documentText), Modifier.padding(top = 8.dp), currentFontSize)
+        }
+
+        if (showReviewQuestions) {
+            StudyListPanel("Review questions", StudyAids.reviewQuestions(documentText), Modifier.padding(top = 8.dp), currentFontSize)
         }
 
         Spacer(modifier = Modifier.height(8.dp))
